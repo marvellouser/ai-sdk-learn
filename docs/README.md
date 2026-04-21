@@ -9,3 +9,4 @@
 - `07-express-streaming-api.md`
 - `08-provider-switching.md`
 - `09-final-demo.md`
+- `10-ai-sdk-core-ui-study-guide.md`
