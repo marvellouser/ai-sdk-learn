@@ -100,11 +100,11 @@ export function AgentChat({ agentId }: { agentId: AgentId }) {
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-6 px-4 py-10 md:px-6">
-      <section className="rounded-3xl border border-border bg-surface p-6 shadow-[0_0_36px_rgba(59,130,246,0.15)] backdrop-blur-xl md:p-7">
+      <section className="rounded-3xl border border-border bg-surface p-6 shadow-[0_16px_36px_rgba(15,23,42,0.08)] backdrop-blur-xl md:p-7">
         <div className="flex flex-wrap items-start justify-between gap-5">
           <div>
             <p className="mb-2 text-xs font-semibold tracking-[0.16em] text-accent-light">AGENT MODE</p>
-            <h1 className="bg-gradient-to-r from-white via-sky-200 to-accent-light bg-clip-text text-4xl leading-tight font-semibold text-transparent md:text-5xl">
+            <h1 className="bg-gradient-to-r from-text via-text to-accent bg-clip-text text-4xl leading-tight font-semibold text-transparent md:text-5xl">
               {preset.title}
             </h1>
             <p className="mt-3 max-w-3xl leading-7 text-muted">{preset.subtitle}</p>
@@ -120,9 +120,9 @@ export function AgentChat({ agentId }: { agentId: AgentId }) {
             </select>
             <Link
               className="inline-flex items-center justify-center rounded-full border border-border bg-surface-light px-4 py-2.5 text-sm text-text transition hover:border-accent-light hover:text-accent-light"
-              href="/"
+              href="/ai-sdk-learning"
             >
-              返回课程页
+              返回学习导航
             </Link>
           </div>
         </div>

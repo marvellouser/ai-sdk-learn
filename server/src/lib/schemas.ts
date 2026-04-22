@@ -56,5 +56,16 @@ export const agentChatBodySchema = z.object({
   context: z.record(z.string(), z.any()).optional(),
 });
 
+export const stylePresetSchema = z.enum(['story', 'professional', 'empathetic', 'casual']);
+
+export const mediaCopyChatBodySchema = z.object({
+  messages: z.array(z.any()),
+  provider: providerSchema.optional(),
+  profileId: z.string().trim().max(128).optional(),
+  stylePreset: stylePresetSchema,
+  customStyle: z.string().max(240).optional(),
+});
+
 export type StudyPlan = z.infer<typeof studyPlanSchema>;
 export type ProductAnalysis = z.infer<typeof productAnalysisSchema>;
+export type StylePreset = z.infer<typeof stylePresetSchema>;

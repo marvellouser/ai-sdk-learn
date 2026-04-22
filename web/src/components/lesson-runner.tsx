@@ -83,7 +83,7 @@ export function LessonRunner({ lesson }: { lesson: LessonCard }) {
   }
 
   return (
-    <article className="rounded-2xl border border-border bg-surface p-6 shadow-[0_0_35px_rgba(59,130,246,0.15)] backdrop-blur-lg">
+    <article className="rounded-2xl border border-border bg-surface p-6 shadow-[0_16px_36px_rgba(15,23,42,0.08)] backdrop-blur-lg">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="mb-2 text-xs font-semibold tracking-[0.16em] text-accent-light">{lesson.id.toUpperCase()}</p>

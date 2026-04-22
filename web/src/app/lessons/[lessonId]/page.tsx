@@ -26,9 +26,9 @@ export default async function LessonPage({ params }: { params: Promise<{ lessonI
         <p className="text-sm text-muted">LESSON DETAIL</p>
         <Link
           className="inline-flex items-center rounded-full border border-border bg-surface-light px-4 py-2 text-sm text-text transition hover:border-accent-light hover:text-accent-light"
-          href="/"
+          href="/ai-sdk-learning"
         >
-          返回首页
+          返回学习导航
         </Link>
       </div>
       <LessonRunner lesson={lesson} />
