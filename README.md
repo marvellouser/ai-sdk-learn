@@ -12,8 +12,10 @@
 
 1. 复制 `.env.example` 为根目录 `.env`
 2. 配置模型连接参数（每个模型都通过 OpenAI 兼容格式接入）：
+
 - `QWEN_API_KEY` + `QWEN_BASE_URL` + `QWEN_MODEL_NAME`
 - `DEEPSEEK_API_KEY` + `DEEPSEEK_BASE_URL` + `DEEPSEEK_MODEL_NAME`
+
 3. 安装依赖:
 
 ```bash

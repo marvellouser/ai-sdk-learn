@@ -63,10 +63,33 @@
 - 先把 provider 与 model 封装成工厂，再在业务层传入 `prompt/messages`。  
 - 需要可观测性时，统一记录 `usage`、`finishReason`、`providerMetadata`。
 
+### 代码示例
+
+```ts
+import { generateText, streamText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+// 一次性生成
+const { text, usage, finishReason } = await generateText({
+  model: openai('gpt-4o'),
+  prompt: '用一句话解释什么是 AI SDK',
+});
+
+// 流式生成
+const result = streamText({
+  model: openai('gpt-4o'),
+  prompt: '列举 AI SDK Core 的三大核心能力',
+});
+
+for await (const chunk of result.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
 ### 自检题
 
 - 你如何向同事解释 Core 与 UI 的职责边界？  
-自检点：是否能说清“Core 负责能力，UI 负责呈现”。  
+自检点：是否能说清”Core 负责能力，UI 负责呈现”。  
 - 如果后续要切模型厂商，你的业务层是否需要大改？  
 自检点：是否已抽象 provider/model 而非写死。
 
@@ -86,9 +109,41 @@
 - 为不同任务选择不同模型：如快速模型用于聊天，高质量模型用于结构化生成。  
 - 预留 fallback 策略：主模型失败时自动切备用模型。
 
+### 代码示例
+
+```ts
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
+import { generateText } from 'ai';
+
+// 用工厂函数创建 provider，业务层不关心底层细节
+function getProvider(name: 'qwen' | 'deepseek') {
+  const config = {
+    qwen: { baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1', apiKey: process.env.QWEN_API_KEY! },
+    deepseek: { baseURL: 'https://api.deepseek.com/v1', apiKey: process.env.DEEPSEEK_API_KEY! },
+  };
+  return createOpenAICompatible({ name, ...config[name] });
+}
+
+// 业务层只传 provider 名称，切换模型不改业务代码
+const provider = getProvider('qwen');
+const { text } = await generateText({
+  model: provider('qwen-plus'),
+  prompt: '你好',
+});
+
+// Fallback 策略
+async function generateWithFallback(prompt: string) {
+  try {
+    return await generateText({ model: getProvider('qwen')('qwen-plus'), prompt });
+  } catch {
+    return await generateText({ model: getProvider('deepseek')('deepseek-chat'), prompt });
+  }
+}
+```
+
 ### 自检题
 
-- 你的项目里“换模型”是改配置还是改业务代码？  
+- 你的项目里”换模型”是改配置还是改业务代码？  
 自检点：答案应偏向改配置。  
 - 如何做 provider fallback 才不影响上层接口？  
 自检点：输入/输出 schema 保持一致。
@@ -108,6 +163,40 @@
 - 结构化输出场景降低 `temperature`，提高可复现性。  
 - 长输出任务配合 `maxTokens` 与分步生成，减少截断风险。  
 - 将默认 settings 放在统一配置层，业务层按需覆盖局部参数。
+
+### 代码示例
+
+```ts
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+// 结构化输出：低 temperature 提高稳定性
+const { text } = await generateText({
+  model: openai('gpt-4o'),
+  temperature: 0,
+  maxTokens: 2048,
+  topP: 0.9,
+  prompt: '提取以下文本中的人名和地点...',
+});
+
+// 创意场景：适当提高 temperature
+const { text: story } = await generateText({
+  model: openai('gpt-4o'),
+  temperature: 0.8,
+  maxTokens: 4096,
+  prompt: '写一个关于时间旅行的短故事',
+});
+
+// 统一默认配置，业务层按需覆盖
+const defaultSettings = { temperature: 0.2, maxTokens: 2048 };
+
+const { text: summary } = await generateText({
+  model: openai('gpt-4o'),
+  ...defaultSettings,
+  maxTokens: 512, // 局部覆盖
+  prompt: '总结这段文字',
+});
+```
 
 ### 自检题
 
@@ -132,6 +221,40 @@
 - 聊天 UI 或长回答场景使用 `streamText`，前端边收边渲染。  
 - 在 `onFinish/onError` 统一记录调用成本、延迟与失败原因。
 
+### 代码示例
+
+```ts
+import { generateText, streamText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+// 一次性生成：适合总结、改写、批处理
+const { text, usage, finishReason } = await generateText({
+  model: openai('gpt-4o'),
+  prompt: '用三句话总结量子计算的核心原理',
+});
+console.log(`Tokens: ${usage.totalTokens}, Finish: ${finishReason}`);
+
+// 流式生成：适合聊天 UI、长回答
+const result = streamText({
+  model: openai('gpt-4o'),
+  messages: [
+    { role: 'system', content: '你是一位技术顾问' },
+    { role: 'user', content: '解释微服务架构的优缺点' },
+  ],
+  onFinish({ text, usage, finishReason }) {
+    console.log(`完成: ${finishReason}, tokens: ${usage.totalTokens}`);
+  },
+  onError({ error }) {
+    console.error('生成失败:', error);
+  },
+});
+
+// 消费流
+for await (const chunk of result.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
 ### 自检题
 
 - 何时选 `generateText`，何时选 `streamText`？  
@@ -154,6 +277,43 @@
 - 用对象 schema 生成分类结果、任务拆解、表单数据。  
 - 对模型输出做严格校验，失败时触发重试或降级流程。  
 - 在 Agent 流程里把结构化结果直接作为下一步工具输入。
+
+### 代码示例
+
+```ts
+import { generateObject, streamObject } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { z } from 'zod';
+
+// 一次性生成结构化对象
+const { object } = await generateObject({
+  model: openai('gpt-4o'),
+  schema: z.object({
+    category: z.enum(['bug', 'feature', 'question']),
+    priority: z.enum(['low', 'medium', 'high']),
+    summary: z.string().describe('一句话摘要'),
+    tags: z.array(z.string()),
+  }),
+  prompt: '分类这条反馈：登录页面在 Safari 上白屏，急需修复',
+});
+console.log(object.category); // 'bug'
+
+// 流式生成结构化对象（边生成边渲染）
+const result = streamObject({
+  model: openai('gpt-4o'),
+  schema: z.object({
+    steps: z.array(z.object({
+      title: z.string(),
+      description: z.string(),
+    })),
+  }),
+  prompt: '拆解"搭建 RAG 系统"为可执行步骤',
+});
+
+for await (const partialObject of result.partialObjectStream) {
+  console.log(partialObject); // 逐步填充的部分对象
+}
+```
 
 ### 自检题
 
@@ -178,6 +338,46 @@
 - 对高风险工具增加人工确认或策略校验（如删除、写入类操作）。  
 - 工具执行结果标准化返回，便于模型继续推理或总结。
 
+### 代码示例
+
+```ts
+import { generateText, tool } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { z } from 'zod';
+
+const { text, toolCalls, toolResults } = await generateText({
+  model: openai('gpt-4o'),
+  tools: {
+    getWeather: tool({
+      description: '获取指定城市的天气信息',
+      parameters: z.object({
+        city: z.string().describe('城市名称'),
+      }),
+      execute: async ({ city }) => {
+        // 实际场景调用天气 API
+        return { city, temp: 22, condition: '晴' };
+      },
+    }),
+    searchDocs: tool({
+      description: '搜索内部文档',
+      parameters: z.object({
+        query: z.string(),
+        limit: z.number().default(5),
+      }),
+      execute: async ({ query, limit }) => {
+        return { results: [`关于 ${query} 的文档1`, `关于 ${query} 的文档2`] };
+      },
+    }),
+  },
+  maxSteps: 5, // 允许多轮工具调用
+  prompt: '北京今天天气怎么样？',
+});
+
+console.log(text);        // 模型基于工具结果生成的最终回答
+console.log(toolCalls);   // [{ toolName: 'getWeather', args: { city: '北京' } }]
+console.log(toolResults); // [{ toolName: 'getWeather', result: { city: '北京', temp: 22, ... } }]
+```
+
 ### 自检题
 
 - 一个可上线工具最少应包含哪些定义？  
@@ -200,6 +400,45 @@
 - 在请求前自动注入系统提示词、用户上下文或安全策略。  
 - 在响应后统一脱敏、敏感词检测、成本上报。  
 - 为不同租户动态附加策略，实现多租户隔离控制。
+
+### 代码示例
+
+```ts
+import { generateText, wrapLanguageModel } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+// 定义中间件：在请求前注入系统提示词，在响应后记录日志
+const loggingMiddleware = {
+  transformParams: async ({ params }) => {
+    console.log(`[请求] model=${params.model}, prompt长度=${JSON.stringify(params.prompt).length}`);
+    return {
+      ...params,
+      // 自动注入安全策略提示词
+      prompt: {
+        ...params.prompt,
+        system: `${params.prompt.system ?? ''}\n请勿输出任何敏感信息。`,
+      },
+    };
+  },
+  wrapGenerate: async ({ doGenerate }) => {
+    const start = Date.now();
+    const result = await doGenerate();
+    console.log(`[响应] 耗时=${Date.now() - start}ms, tokens=${result.usage.totalTokens}`);
+    return result;
+  },
+};
+
+// 用 wrapLanguageModel 包装原始模型
+const wrappedModel = wrapLanguageModel({
+  model: openai('gpt-4o'),
+  middleware: loggingMiddleware,
+});
+
+const { text } = await generateText({
+  model: wrappedModel,
+  prompt: '你好',
+});
+```
 
 ### 自检题
 
@@ -224,6 +463,45 @@
 - 在 `onFinish` 汇总 usage、输出质量评分、入库。  
 - 在 `onError` 统一上报告警并绑定请求上下文。
 
+### 代码示例
+
+```ts
+import { streamText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const result = streamText({
+  model: openai('gpt-4o'),
+  prompt: '详细解释 CQRS 架构模式',
+
+  onChunk({ chunk }) {
+    // 实时处理每个 chunk：日志、敏感词检测等
+    if (chunk.type === 'text-delta') {
+      // 可在此做敏感内容早期拦截
+      if (chunk.textDelta.includes('机密')) {
+        console.warn('[安全] 检测到敏感内容');
+      }
+    }
+  },
+
+  onFinish({ text, usage, finishReason }) {
+    // 汇总指标入库
+    console.log(`完成原因: ${finishReason}`);
+    console.log(`Token 消耗: prompt=${usage.promptTokens}, completion=${usage.completionTokens}`);
+    // db.insert({ text, usage, finishReason, timestamp: Date.now() });
+  },
+
+  onError({ error }) {
+    // 统一告警上报
+    console.error('[告警] 生成失败:', error.message);
+    // alertService.notify({ error, context: 'streamText' });
+  },
+});
+
+for await (const chunk of result.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
 ### 自检题
 
 - 你会把哪些逻辑放在 `onFinish`，哪些放在 `onChunk`？  
@@ -246,6 +524,40 @@
 - 构建统一错误映射层，把 provider 原始错误归一化。  
 - 对网络抖动/限流等可重试错误实施指数退避重试。  
 - 记录 request id、model、prompt 摘要、工具链路用于排障。
+
+### 代码示例
+
+```ts
+import { generateText, APICallError } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+// 统一错误处理 + 指数退避重试
+async function generateWithRetry(prompt: string, maxRetries = 3) {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await generateText({
+        model: openai('gpt-4o'),
+        prompt,
+      });
+    } catch (error) {
+      if (APICallError.isInstance(error)) {
+        const { statusCode, message, requestBodyValues } = error;
+        console.error(`[错误] status=${statusCode}, msg=${message}`);
+
+        // 可重试：限流(429)、服务端错误(5xx)
+        if (statusCode === 429 || (statusCode && statusCode >= 500)) {
+          const delay = Math.pow(2, attempt) * 1000;
+          console.log(`第 ${attempt + 1} 次重试，等待 ${delay}ms...`);
+          await new Promise(r => setTimeout(r, delay));
+          continue;
+        }
+      }
+      throw error; // 不可重试错误直接抛出
+    }
+  }
+  throw new Error('重试次数耗尽');
+}
+```
 
 ### 自检题
 
@@ -270,6 +582,46 @@
 - 按模型与场景维度做看板，定位“高成本低收益”路径。  
 - 与告警系统联动，异常峰值触发报警。
 
+### 代码示例
+
+```ts
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+// 开启 OpenTelemetry 遥测
+const { text, usage } = await generateText({
+  model: openai('gpt-4o'),
+  prompt: '解释 SOLID 原则',
+  experimental_telemetry: {
+    isEnabled: true,
+    functionId: 'explain-solid',       // 标识业务场景
+    metadata: {
+      userId: 'user-123',
+      environment: 'production',
+    },
+  },
+});
+
+// 手动记录关键指标（配合自定义看板）
+function logMetrics(scene: string, usage: { promptTokens: number; completionTokens: number; totalTokens: number }, latencyMs: number) {
+  console.log(JSON.stringify({
+    scene,
+    promptTokens: usage.promptTokens,
+    completionTokens: usage.completionTokens,
+    totalTokens: usage.totalTokens,
+    latencyMs,
+    timestamp: Date.now(),
+  }));
+}
+
+const start = Date.now();
+const result = await generateText({
+  model: openai('gpt-4o'),
+  prompt: '什么是事件驱动架构？',
+});
+logMetrics('architecture-qa', result.usage, Date.now() - start);
+```
+
 ### 自检题
 
 - 你当前最缺失的 AI 观测指标是什么？  
@@ -292,6 +644,60 @@
 - 对结构化输出做 schema 断言。  
 - 用固定输入集做回归测试，比较关键字段和指标波动。  
 - 对工具调用路径做端到端测试，验证参数与顺序。
+
+### 代码示例
+
+```ts
+import { generateText, tool } from 'ai';
+import { MockLanguageModelV1 } from 'ai/test';
+import { z } from 'zod';
+import { describe, it, expect } from 'vitest';
+
+describe('AI SDK 测试', () => {
+  // 用 MockLanguageModelV1 模拟模型，不依赖真实 API
+  it('应返回结构化工具调用', async () => {
+    const mockModel = new MockLanguageModelV1({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'tool-calls',
+        usage: { promptTokens: 10, completionTokens: 5 },
+        toolCalls: [
+          {
+            toolCallType: 'function',
+            toolCallId: 'call-1',
+            toolName: 'getWeather',
+            args: '{"city":"北京"}',
+          },
+        ],
+      }),
+    });
+
+    const result = await generateText({
+      model: mockModel,
+      tools: {
+        getWeather: tool({
+          description: '获取天气',
+          parameters: z.object({ city: z.string() }),
+          execute: async ({ city }) => ({ city, temp: 22 }),
+        }),
+      },
+      prompt: '北京天气',
+    });
+
+    expect(result.toolResults[0].result).toEqual({ city: '北京', temp: 22 });
+  });
+
+  // 对结构化输出做 schema 断言
+  it('输出应符合 schema', async () => {
+    const schema = z.object({
+      category: z.enum(['bug', 'feature', 'question']),
+      summary: z.string().min(1),
+    });
+    const output = { category: 'bug', summary: '登录白屏' };
+    expect(schema.parse(output)).toEqual(output);
+  });
+});
+```
 
 ### 自检题
 
@@ -316,6 +722,48 @@
 - 对多轮任务采用分步 prompt，降低一次性复杂度。  
 - A/B 对比不同 prompt 模板，量化质量收益。
 
+### 代码示例
+
+```ts
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+// 结构化 prompt：角色 + 目标 + 约束 + 格式 + 示例
+const { text } = await generateText({
+  model: openai('gpt-4o'),
+  messages: [
+    {
+      role: 'system',
+      content: `你是一位资深技术文档编辑。
+目标：将用户输入的技术概念改写为面向初学者的解释。
+约束：不超过 3 句话，不使用英文缩写，用类比辅助理解。
+输出格式：纯文本段落。`,
+    },
+    {
+      role: 'user',
+      content: '什么是 WebSocket？',
+    },
+  ],
+});
+
+// 分步 prompt：复杂任务拆成多轮
+const { text: outline } = await generateText({
+  model: openai('gpt-4o'),
+  messages: [
+    { role: 'system', content: '你是技术博客作者' },
+    { role: 'user', content: '为"微服务拆分策略"写一个大纲，列出 3-5 个要点' },
+  ],
+});
+
+const { text: article } = await generateText({
+  model: openai('gpt-4o'),
+  messages: [
+    { role: 'system', content: '你是技术博客作者，根据大纲展开写作' },
+    { role: 'user', content: `大纲如下：\n${outline}\n\n请展开第一个要点，200 字以内。` },
+  ],
+});
+```
+
 ### 自检题
 
 - 一个你常用 prompt 模板包含哪些固定段落？  
@@ -338,6 +786,48 @@
 - 通过 MCP 连接检索、知识库、业务服务，形成统一工具层。  
 - 用 MCP 资源做上下文注入，提升回答相关性。  
 - 对 MCP 工具做白名单与调用审计。
+
+### 代码示例
+
+```ts
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { experimental_createMCPClient as createMCPClient } from 'ai';
+import { Experimental_StdioMCPTransport as StdioMCPTransport } from 'ai';
+
+// 通过 stdio 连接本地 MCP Server
+const mcpClient = await createMCPClient({
+  transport: new StdioMCPTransport({
+    command: 'node',
+    args: ['./mcp-server.js'],
+  }),
+});
+
+// 获取 MCP 暴露的工具
+const tools = await mcpClient.tools();
+
+const { text, toolCalls } = await generateText({
+  model: openai('gpt-4o'),
+  tools,       // 直接传入 MCP 工具
+  maxSteps: 5,
+  prompt: '查询最近的销售数据并生成摘要',
+});
+
+console.log(text);
+console.log('工具调用记录:', toolCalls); // 可用于审计
+
+// 使用完毕关闭连接
+await mcpClient.close();
+
+// SSE 方式连接远程 MCP Server
+import { Experimental_SSEMCPTransport as SSEMCPTransport } from 'ai';
+
+const remoteMcp = await createMCPClient({
+  transport: new SSEMCPTransport({
+    url: 'https://mcp.example.com/sse',
+  }),
+});
+```
 
 ### 自检题
 
@@ -362,6 +852,43 @@
 - 相似问题推荐、FAQ 去重、语义分类。  
 - 为检索链路记录召回率与命中质量指标。
 
+### 代码示例
+
+```ts
+import { embed, embedMany, cosineSimilarity } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+// 单条文本向量化
+const { embedding } = await embed({
+  model: openai.embedding('text-embedding-3-small'),
+  value: '什么是向量数据库？',
+});
+console.log(embedding.length); // 1536
+
+// 批量向量化（离线建库）
+const { embeddings } = await embedMany({
+  model: openai.embedding('text-embedding-3-small'),
+  values: [
+    '向量数据库用于存储和检索高维向量',
+    'RAG 是检索增强生成的缩写',
+    'Embedding 将文本映射到向量空间',
+  ],
+});
+
+// 语义相似度检索
+const query = await embed({
+  model: openai.embedding('text-embedding-3-small'),
+  value: '如何做语义搜索？',
+});
+
+const similarities = embeddings.map((e, i) => ({
+  index: i,
+  score: cosineSimilarity(query.embedding, e),
+}));
+similarities.sort((a, b) => b.score - a.score);
+console.log('最相关:', similarities[0]); // { index: 2, score: 0.89 }
+```
+
 ### 自检题
 
 - 为什么“分块策略”会影响最终问答效果？  
@@ -384,6 +911,36 @@
 - 先向量召回 topK，再 rerank 得到更高质量 topN。  
 - 查询复杂或业务准确率要求高时开启 rerank。  
 - 对不同 query 类型设动态 topK，平衡效果与成本。
+
+### 代码示例
+
+```ts
+import { rerank } from 'ai';
+import { cohere } from '@ai-sdk/cohere';
+
+// 先用 embedding 召回 topK 候选，再用 rerank 精排
+const candidates = [
+  '向量数据库是专门存储和检索高维向量的数据库系统',
+  'SQL 数据库使用结构化查询语言进行数据操作',
+  '向量检索通过计算余弦相似度来找到最相关的文档',
+  '关系型数据库通过表和外键来组织数据',
+  '语义搜索利用向量表示来理解查询意图',
+];
+
+const { results } = await rerank({
+  model: cohere.reranker('rerank-v3.5'),
+  query: '什么是向量数据库？',
+  documents: candidates,
+  topN: 3, // 只取最相关的 3 条
+});
+
+results.forEach(({ document, relevanceScore }) => {
+  console.log(`[${relevanceScore.toFixed(3)}] ${document}`);
+});
+// [0.952] 向量数据库是专门存储和检索高维向量的数据库系统
+// [0.871] 向量检索通过计算余弦相似度来找到最相关的文档
+// [0.743] 语义搜索利用向量表示来理解查询意图
+```
 
 ### 自检题
 
@@ -408,6 +965,36 @@
 - 对输入 prompt 做安全过滤，对输出图做合规审查。  
 - 记录生成参数以支持复现与问题追踪。
 
+### 代码示例
+
+```ts
+import { experimental_generateImage as generateImage } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const { image } = await generateImage({
+  model: openai.image('dall-e-3'),
+  prompt: '一只戴着眼镜在写代码的猫，赛博朋克风格',
+  size: '1024x1024',
+  providerOptions: {
+    openai: { quality: 'hd', style: 'vivid' },
+  },
+});
+
+// image.base64 — base64 编码的图片数据
+// image.uint8Array — 二进制数据，可直接写入文件
+import { writeFile } from 'fs/promises';
+await writeFile('output.png', image.uint8Array);
+
+// 记录生成参数用于复现
+const generationLog = {
+  prompt: '一只戴着眼镜在写代码的猫，赛博朋克风格',
+  model: 'dall-e-3',
+  size: '1024x1024',
+  timestamp: Date.now(),
+};
+console.log('生成记录:', generationLog);
+```
+
 ### 自检题
 
 - 图像生成上线后你最先监控什么？  
@@ -429,7 +1016,45 @@
 
 - 提交生成任务后轮询或回调获取状态与结果。  
 - 对任务设置超时、重试与取消机制。  
-- 对外提供“生成中/已完成/失败原因”的用户态反馈。
+- 对外提供”生成中/已完成/失败原因”的用户态反馈。
+
+### 代码示例
+
+```ts
+import { experimental_generateVideo as generateVideo } from 'ai';
+import { luma } from '@ai-sdk/luma';
+import { writeFile } from 'fs/promises';
+
+// 视频生成是异步长任务，SDK 内部会轮询直到完成
+const { video } = await generateVideo({
+  model: luma.video('ray-2'),
+  prompt: '一只猫在键盘上打字，电影质感',
+  providerOptions: {
+    luma: { aspectRatio: '16:9' },
+  },
+});
+
+await writeFile('output.mp4', video.uint8Array);
+
+// 生产环境建议加超时与错误处理
+async function generateVideoSafe(prompt: string) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5 * 60 * 1000); // 5 分钟超时
+
+  try {
+    const { video } = await generateVideo({
+      model: luma.video('ray-2'),
+      prompt,
+      abortSignal: controller.signal,
+    });
+    return { status: 'completed' as const, video };
+  } catch (error) {
+    return { status: 'failed' as const, reason: String(error) };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+```
 
 ### 自检题
 
@@ -454,6 +1079,44 @@
 - 教学内容、通知信息自动配音。  
 - 针对移动端选择合适编码格式平衡音质与带宽。
 
+### 代码示例
+
+```ts
+import { experimental_generateSpeech as generateSpeech } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { writeFile } from 'fs/promises';
+
+// 文本转语音（TTS）
+const { speech } = await generateSpeech({
+  model: openai.speech('tts-1'),
+  text: '欢迎使用 AI SDK，这是一段语音合成示例。',
+  voice: 'alloy',          // 音色选择
+  providerOptions: {
+    openai: {
+      speed: 1.0,           // 语速控制
+      response_format: 'mp3', // 格式：mp3 体积小，wav 音质高
+    },
+  },
+});
+
+await writeFile('speech.mp3', speech.uint8Array);
+
+// 流式语音输出（低延迟场景）
+import { experimental_streamSpeech as streamSpeech } from 'ai';
+
+const result = streamSpeech({
+  model: openai.speech('tts-1'),
+  text: '这是一段流式语音，适合实时播放场景。',
+  voice: 'nova',
+});
+
+const chunks: Buffer[] = [];
+for await (const chunk of result.audioStream) {
+  chunks.push(Buffer.from(chunk));
+}
+await writeFile('stream-speech.mp3', Buffer.concat(chunks));
+```
+
 ### 自检题
 
 - TTS 场景中你会优先优化“自然度”还是“延迟”？为什么？  
@@ -476,6 +1139,36 @@
 - 会议纪要、客服录音、教学音频转文本。  
 - 结合术语词表提升垂直领域识别准确率。  
 - 转写结果与原音频片段绑定，支持人工复核。
+
+### 代码示例
+
+```ts
+import { experimental_transcribe as transcribe } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { readFile } from 'fs/promises';
+
+// 语音转文本（ASR）
+const audioBuffer = await readFile('meeting-recording.mp3');
+
+const { text, segments } = await transcribe({
+  model: openai.transcription('whisper-1'),
+  audio: audioBuffer,
+  providerOptions: {
+    openai: {
+      language: 'zh',              // 指定语言提升准确率
+      response_format: 'verbose_json', // 获取分段时间戳
+      prompt: 'AI SDK, RAG, LLM',  // 术语词表提示
+    },
+  },
+});
+
+console.log('转写结果:', text);
+
+// 分段信息（含时间戳），可用于字幕或人工复核
+segments?.forEach(seg => {
+  console.log(`[${seg.start.toFixed(1)}s - ${seg.end.toFixed(1)}s] ${seg.text}`);
+});
+```
 
 ### 自检题
 
@@ -500,6 +1193,45 @@
 - 排查流式中断、工具调用参数异常、结构化校验失败。  
 - 与日志平台联动，缩短问题定位时间。
 
+### 代码示例
+
+```ts
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+// 开启 telemetry 后，可在 Vercel AI Playground 或 OpenTelemetry 后端查看调用详情
+const { text, usage, finishReason, response } = await generateText({
+  model: openai('gpt-4o'),
+  prompt: '什么是依赖注入？',
+  experimental_telemetry: { isEnabled: true, functionId: 'debug-demo' },
+});
+
+// 开发环境手动打印调试信息
+console.log('[DEBUG] finishReason:', finishReason);
+console.log('[DEBUG] usage:', usage);
+console.log('[DEBUG] response headers:', response.headers);
+console.log('[DEBUG] model id:', response.modelId);
+
+// 排查流式中断：监听每个事件
+import { streamText } from 'ai';
+
+const stream = streamText({
+  model: openai('gpt-4o'),
+  prompt: '列举设计模式',
+  onChunk({ chunk }) {
+    console.log('[CHUNK]', chunk.type, chunk.type === 'text-delta' ? chunk.textDelta.slice(0, 20) : '');
+  },
+  onFinish({ finishReason, usage }) {
+    console.log('[FINISH]', finishReason, usage);
+  },
+  onError({ error }) {
+    console.error('[ERROR]', error);
+  },
+});
+
+for await (const _ of stream.textStream) { /* consume */ }
+```
+
 ### 自检题
 
 - 你最近一次模型问题排查卡在什么环节？  
@@ -523,6 +1255,52 @@
 - 复用 SDK 的消息管理与请求生命周期能力，减少手写状态机。  
 - 通过 metadata 与 data stream 扩展富交互体验。
 
+### 代码示例
+
+```tsx
+// --- 后端 (Next.js Route Handler) ---
+// app/api/chat/route.ts
+import { streamText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+export async function POST(req: Request) {
+  const { messages } = await req.json();
+
+  const result = streamText({
+    model: openai('gpt-4o'),
+    system: '你是一位友好的技术助手',
+    messages,
+  });
+
+  return result.toDataStreamResponse();
+}
+
+// --- 前端 (React 组件) ---
+// app/page.tsx
+'use client';
+import { useChat } from '@ai-sdk/react';
+
+export default function Chat() {
+  const { messages, input, handleInputChange, handleSubmit, status } = useChat();
+
+  return (
+    <div>
+      {messages.map(m => (
+        <div key={m.id}>
+          <strong>{m.role}:</strong> {m.parts.map((part, i) =>
+            part.type === 'text' ? <span key={i}>{part.text}</span> : null
+          )}
+        </div>
+      ))}
+      <form onSubmit={handleSubmit}>
+        <input value={input} onChange={handleInputChange} placeholder="输入消息..." />
+        <button type="submit" disabled={status === 'streaming'}>发送</button>
+      </form>
+    </div>
+  );
+}
+```
+
 ### 自检题
 
 - UI 层为什么不直接替代 Core？  
@@ -544,7 +1322,66 @@
 
 - 用 `useChat` 维护消息列表并驱动 UI 更新。  
 - 在发送前做输入校验与上下文拼装。  
-- 为消息项增加“复制、重试、继续生成”等操作。
+- 为消息项增加”复制、重试、继续生成”等操作。
+
+### 代码示例
+
+```tsx
+'use client';
+import { useChat } from '@ai-sdk/react';
+
+export default function Chatbot() {
+  const {
+    messages,
+    input,
+    handleInputChange,
+    handleSubmit,
+    status,
+    reload,  // 重试最后一条
+    stop,    // 中断生成
+    setMessages,
+  } = useChat({
+    api: '/api/chat',
+    initialMessages: [],       // 可从持久化恢复
+    onFinish(message) {
+      console.log('回答完成:', message.id);
+    },
+    onError(error) {
+      console.error('请求失败:', error);
+    },
+  });
+
+  return (
+    <div>
+      {messages.map(m => (
+        <div key={m.id}>
+          <strong>{m.role === 'user' ? '你' : 'AI'}:</strong>
+          {m.parts.map((part, i) =>
+            part.type === 'text' ? <span key={i}>{part.text}</span> : null
+          )}
+          {m.role === 'assistant' && (
+            <button onClick={() => reload()}>重试</button>
+          )}
+        </div>
+      ))}
+
+      {status === 'streaming' && (
+        <button onClick={() => stop()}>停止生成</button>
+      )}
+
+      <form onSubmit={handleSubmit}>
+        <input
+          value={input}
+          onChange={handleInputChange}
+          placeholder=”输入消息...”
+          disabled={status === 'streaming'}
+        />
+        <button type=”submit” disabled={status === 'streaming'}>发送</button>
+      </form>
+    </div>
+  );
+}
+```
 
 ### 自检题
 
@@ -569,6 +1406,77 @@
 - 对结果型工具输出做专用组件展示（如卡片、表格）。  
 - 对高风险工具加入显式确认步骤。
 
+### 代码示例
+
+```tsx
+'use client';
+import { useChat } from '@ai-sdk/react';
+
+export default function ChatWithTools() {
+  const { messages, input, handleInputChange, handleSubmit } = useChat({
+    api: '/api/chat',
+    maxSteps: 5, // 允许前端自动继续工具调用轮次
+  });
+
+  return (
+    <div>
+      {messages.map(m => (
+        <div key={m.id}>
+          <strong>{m.role === 'user' ? '你' : 'AI'}:</strong>
+          {m.parts.map((part, i) => {
+            // 渲染文本
+            if (part.type === 'text') return <span key={i}>{part.text}</span>;
+            // 渲染工具调用状态
+            if (part.type === 'tool-invocation') {
+              const { toolInvocation } = part;
+              if (toolInvocation.state === 'call') {
+                return <div key={i}>🔄 调用工具: {toolInvocation.toolName}...</div>;
+              }
+              if (toolInvocation.state === 'result') {
+                return (
+                  <div key={i}>
+                    ✅ {toolInvocation.toolName} 结果:
+                    <pre>{JSON.stringify(toolInvocation.result, null, 2)}</pre>
+                  </div>
+                );
+              }
+            }
+            return null;
+          })}
+        </div>
+      ))}
+      <form onSubmit={handleSubmit}>
+        <input value={input} onChange={handleInputChange} />
+        <button type="submit">发送</button>
+      </form>
+    </div>
+  );
+}
+
+// --- 后端 ---
+// app/api/chat/route.ts
+import { streamText, tool } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { z } from 'zod';
+
+export async function POST(req: Request) {
+  const { messages } = await req.json();
+  const result = streamText({
+    model: openai('gpt-4o'),
+    messages,
+    tools: {
+      getWeather: tool({
+        description: '获取城市天气',
+        parameters: z.object({ city: z.string() }),
+        execute: async ({ city }) => ({ city, temp: 25, condition: '晴' }),
+      }),
+    },
+    maxSteps: 5,
+  });
+  return result.toDataStreamResponse();
+}
+```
+
 ### 自检题
 
 - 为什么工具调用信息要让用户看见？  
@@ -591,6 +1499,62 @@
 - 以会话 ID 为主键保存消息历史。  
 - 首屏加载最近消息并支持分页回溯。  
 - 对草稿与失败消息设置单独状态，避免污染正式记录。
+
+### 代码示例
+
+```tsx
+// --- 后端：持久化消息 ---
+// app/api/chat/route.ts
+import { streamText, UIMessage } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+// 模拟数据库存储
+const chatStore = new Map<string, UIMessage[]>();
+
+export async function POST(req: Request) {
+  const { messages, chatId } = await req.json();
+
+  // 保存用户消息
+  const existing = chatStore.get(chatId) ?? [];
+  chatStore.set(chatId, [...existing, messages.at(-1)!]);
+
+  const result = streamText({
+    model: openai('gpt-4o'),
+    messages,
+    onFinish({ response }) {
+      // 生成完成后保存 assistant 消息（含 metadata、工具信息）
+      const stored = chatStore.get(chatId) ?? [];
+      chatStore.set(chatId, [...stored, ...response.messages]);
+    },
+  });
+
+  return result.toDataStreamResponse();
+}
+
+// --- 前端：从持久化恢复会话 ---
+'use client';
+import { useChat } from '@ai-sdk/react';
+
+export default function Chat({ chatId }: { chatId: string }) {
+  const { messages, input, handleInputChange, handleSubmit } = useChat({
+    api: '/api/chat',
+    body: { chatId },
+    initialMessages: [], // 实际从 API 加载历史消息
+  });
+
+  return (
+    <div>
+      {messages.map(m => (
+        <div key={m.id}>{m.role}: {m.parts.filter(p => p.type === 'text').map(p => p.text).join('')}</div>
+      ))}
+      <form onSubmit={handleSubmit}>
+        <input value={input} onChange={handleInputChange} />
+        <button type="submit">发送</button>
+      </form>
+    </div>
+  );
+}
+```
 
 ### 自检题
 
@@ -615,6 +1579,68 @@
 - 服务端提供可恢复的流上下文或会话快照。  
 - 恢复后做去重合并，确保最终消息一致。
 
+### 代码示例
+
+```tsx
+'use client';
+import { useChat } from '@ai-sdk/react';
+
+export default function ResumableChat({ chatId }: { chatId: string }) {
+  const { messages, input, handleInputChange, handleSubmit, status, experimental_resume } = useChat({
+    api: '/api/chat',
+    body: { chatId },
+    // 从持久化加载历史消息（含未完成的流式消息）
+    initialMessages: [], // 实际从 API 加载
+  });
+
+  // 页面加载时检测是否有未完成的流，自动恢复
+  // experimental_resume() 会向服务端请求从断点继续
+  // 服务端需要缓存流上下文（如 Redis）以支持恢复
+
+  return (
+    <div>
+      {messages.map(m => (
+        <div key={m.id}>
+          {m.role}: {m.parts.filter(p => p.type === 'text').map(p => p.text).join('')}
+        </div>
+      ))}
+
+      {/* 检测到中断的流时显示恢复按钮 */}
+      {status === 'ready' && messages.at(-1)?.role === 'assistant' && (
+        <button onClick={() => experimental_resume()}>恢复生成</button>
+      )}
+
+      <form onSubmit={handleSubmit}>
+        <input value={input} onChange={handleInputChange} />
+        <button type="submit">发送</button>
+      </form>
+    </div>
+  );
+}
+
+// --- 后端需要支持流恢复 ---
+// app/api/chat/route.ts
+import { streamText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+// 缓存活跃流的上下文，支持断点续传
+const streamCache = new Map<string, any>();
+
+export async function POST(req: Request) {
+  const { messages, chatId } = await req.json();
+
+  const result = streamText({
+    model: openai('gpt-4o'),
+    messages,
+    onFinish() {
+      streamCache.delete(chatId); // 完成后清理缓存
+    },
+  });
+
+  return result.toDataStreamResponse();
+}
+```
+
 ### 自检题
 
 - 断网恢复时如何避免重复文本？  
@@ -637,6 +1663,67 @@
 - 写作补全、标题建议、代码片段续写。  
 - 输入框边打边触发建议，提升编辑效率。  
 - 在生成前后做长度与语气控制。
+
+### 代码示例
+
+```tsx
+// --- 后端 ---
+// app/api/completion/route.ts
+import { streamText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+export async function POST(req: Request) {
+  const { prompt } = await req.json();
+
+  const result = streamText({
+    model: openai('gpt-4o'),
+    prompt: `续写以下内容，保持风格一致，不超过 200 字：\n\n${prompt}`,
+  });
+
+  return result.toDataStreamResponse();
+}
+
+// --- 前端 ---
+'use client';
+import { useCompletion } from '@ai-sdk/react';
+
+export default function WritingAssistant() {
+  const {
+    completion,   // 模型生成的补全文本
+    input,
+    handleInputChange,
+    handleSubmit,
+    isLoading,
+    stop,
+  } = useCompletion({
+    api: '/api/completion',
+  });
+
+  return (
+    <div>
+      <form onSubmit={handleSubmit}>
+        <textarea
+          value={input}
+          onChange={handleInputChange}
+          placeholder="输入开头，AI 帮你续写..."
+          rows={4}
+        />
+        <button type="submit" disabled={isLoading}>
+          {isLoading ? '生成中...' : '续写'}
+        </button>
+        {isLoading && <button onClick={stop}>停止</button>}
+      </form>
+
+      {completion && (
+        <div>
+          <h3>续写结果：</h3>
+          <p>{completion}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+```
 
 ### 自检题
 
@@ -661,6 +1748,74 @@
 - 对对象字段做前端二次校验后再渲染。  
 - 结构化失败时回退到文本解释模式。
 
+### 代码示例
+
+```tsx
+// --- 后端 ---
+// app/api/object/route.ts
+import { streamObject } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { z } from 'zod';
+
+const taskSchema = z.object({
+  tasks: z.array(z.object({
+    title: z.string(),
+    priority: z.enum(['high', 'medium', 'low']),
+    estimatedHours: z.number(),
+  })),
+});
+
+export async function POST(req: Request) {
+  const { prompt } = await req.json();
+
+  const result = streamObject({
+    model: openai('gpt-4o'),
+    schema: taskSchema,
+    prompt: `将以下需求拆解为任务列表：${prompt}`,
+  });
+
+  return result.toTextStreamResponse();
+}
+
+// --- 前端 ---
+'use client';
+import { useObject } from '@ai-sdk/react';
+import { z } from 'zod';
+
+const taskSchema = z.object({
+  tasks: z.array(z.object({
+    title: z.string(),
+    priority: z.enum(['high', 'medium', 'low']),
+    estimatedHours: z.number(),
+  })),
+});
+
+export default function TaskGenerator() {
+  const { object, submit, isLoading, error } = useObject({
+    api: '/api/object',
+    schema: taskSchema,
+  });
+
+  return (
+    <div>
+      <button onClick={() => submit('搭建一个用户认证系统')} disabled={isLoading}>
+        生成任务
+      </button>
+
+      {error && <div>生成失败: {error.message}</div>}
+
+      {/* object 是流式填充的部分对象，字段逐步出现 */}
+      {object?.tasks?.map((task, i) => (
+        <div key={i}>
+          <strong>[{task?.priority}]</strong> {task?.title}
+          {task?.estimatedHours && <span> — 预估 {task.estimatedHours}h</span>}
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
 ### 自检题
 
 - 为什么对象生成对前端更友好？  
@@ -683,6 +1838,69 @@
 - 根据消息 part 类型渲染图表、表单、结果卡片。  
 - 把工具结果映射为可交互控件，提高任务完成效率。  
 - 对模型建议动作加入可见确认按钮。
+
+### 代码示例
+
+```tsx
+'use client';
+import { useChat } from '@ai-sdk/react';
+
+// 根据工具名称渲染不同的 UI 组件
+function ToolResult({ name, result }: { name: string; result: any }) {
+  switch (name) {
+    case 'showWeatherCard':
+      return (
+        <div style={{ border: '1px solid #ccc', padding: 12, borderRadius: 8 }}>
+          <h4>🌤 {result.city} 天气</h4>
+          <p>{result.temp}°C · {result.condition}</p>
+        </div>
+      );
+    case 'showConfirmAction':
+      return (
+        <div style={{ border: '1px solid orange', padding: 12, borderRadius: 8 }}>
+          <p>⚠️ {result.message}</p>
+          <button onClick={() => console.log('用户确认')}>确认执行</button>
+          <button onClick={() => console.log('用户取消')}>取消</button>
+        </div>
+      );
+    default:
+      return <pre>{JSON.stringify(result, null, 2)}</pre>;
+  }
+}
+
+export default function GenerativeUI() {
+  const { messages, input, handleInputChange, handleSubmit } = useChat({
+    api: '/api/chat',
+    maxSteps: 5,
+  });
+
+  return (
+    <div>
+      {messages.map(m => (
+        <div key={m.id}>
+          {m.parts.map((part, i) => {
+            if (part.type === 'text') return <p key={i}>{part.text}</p>;
+            if (part.type === 'tool-invocation' && part.toolInvocation.state === 'result') {
+              return (
+                <ToolResult
+                  key={i}
+                  name={part.toolInvocation.toolName}
+                  result={part.toolInvocation.result}
+                />
+              );
+            }
+            return null;
+          })}
+        </div>
+      ))}
+      <form onSubmit={handleSubmit}>
+        <input value={input} onChange={handleInputChange} />
+        <button type="submit">发送</button>
+      </form>
+    </div>
+  );
+}
+```
 
 ### 自检题
 
@@ -707,6 +1925,75 @@
 - 打上审核状态、业务标签，支持筛选与统计。  
 - 持久化 metadata 供后续分析与回放。
 
+### 代码示例
+
+```tsx
+// --- 后端：在流中附加 metadata ---
+// app/api/chat/route.ts
+import { streamText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+export async function POST(req: Request) {
+  const { messages } = await req.json();
+  const start = Date.now();
+
+  const result = streamText({
+    model: openai('gpt-4o'),
+    messages,
+    onFinish({ usage }) {
+      // metadata 可在 onFinish 中收集，通过 data stream 推送给前端
+      console.log('metadata:', {
+        model: 'gpt-4o',
+        latencyMs: Date.now() - start,
+        promptTokens: usage.promptTokens,
+        completionTokens: usage.completionTokens,
+      });
+    },
+  });
+
+  return result.toDataStreamResponse();
+}
+
+// --- 前端：消费 metadata ---
+'use client';
+import { useChat } from '@ai-sdk/react';
+
+// 声明 metadata 类型
+declare module '@ai-sdk/react' {
+  interface ChatMessageMetadata {
+    model?: string;
+    latencyMs?: number;
+    tokens?: number;
+  }
+}
+
+export default function ChatWithMeta() {
+  const { messages, input, handleInputChange, handleSubmit } = useChat({
+    api: '/api/chat',
+  });
+
+  return (
+    <div>
+      {messages.map(m => (
+        <div key={m.id}>
+          <p>{m.parts.filter(p => p.type === 'text').map(p => p.text).join('')}</p>
+          {/* 展示 metadata：模型、耗时、token */}
+          {m.metadata && (
+            <small style={{ color: '#888' }}>
+              {m.metadata.model} · {m.metadata.latencyMs}ms · {m.metadata.tokens} tokens
+            </small>
+          )}
+        </div>
+      ))}
+      <form onSubmit={handleSubmit}>
+        <input value={input} onChange={handleInputChange} />
+        <button type="submit">发送</button>
+      </form>
+    </div>
+  );
+}
+```
+
 ### 自检题
 
 - 哪些信息适合放 metadata，而不是正文？  
@@ -729,6 +2016,53 @@
 - 默认使用标准 HTTP 传输，按需注入认证信息。  
 - 在 transport 层统一处理请求签名与租户标识。  
 - 对慢请求设置超时与取消策略。
+
+### 代码示例
+
+```tsx
+'use client';
+import { useChat, DefaultChatTransport } from '@ai-sdk/react';
+
+// 自定义 Transport：注入鉴权、租户标识、超时控制
+class AuthenticatedTransport extends DefaultChatTransport {
+  constructor(private token: string, private tenantId: string) {
+    super({ api: '/api/chat' });
+  }
+
+  // 覆写 headers 注入认证信息
+  get headers() {
+    return {
+      Authorization: `Bearer ${this.token}`,
+      'X-Tenant-Id': this.tenantId,
+    };
+  }
+}
+
+// 指向非默认后端的 Transport（如独立 Express 服务）
+const externalTransport = new DefaultChatTransport({
+  api: 'http://localhost:8080/api/agents/coach/chat',
+});
+
+export default function Chat() {
+  const transport = new AuthenticatedTransport('my-jwt-token', 'tenant-abc');
+
+  const { messages, input, handleInputChange, handleSubmit } = useChat({
+    transport, // 替换默认传输层
+  });
+
+  return (
+    <div>
+      {messages.map(m => (
+        <div key={m.id}>{m.role}: {m.parts.filter(p => p.type === 'text').map(p => p.text).join('')}</div>
+      ))}
+      <form onSubmit={handleSubmit}>
+        <input value={input} onChange={handleInputChange} />
+        <button type="submit">发送</button>
+      </form>
+    </div>
+  );
+}
+```
 
 ### 自检题
 
@@ -753,6 +2087,49 @@
 - 在协议层明确事件类型与边界（开始、增量、结束、错误）。  
 - 升级协议版本时保留兼容处理逻辑。
 
+### 代码示例
+
+```ts
+// --- Data Stream Protocol（推荐）---
+// 后端使用 toDataStreamResponse() 自动输出符合协议的流
+import { streamText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+export async function POST(req: Request) {
+  const { messages } = await req.json();
+
+  const result = streamText({
+    model: openai('gpt-4o'),
+    messages,
+  });
+
+  // Data Stream Protocol：自动编码文本、工具调用、数据事件
+  // 格式示例：
+  //   0:"Hello"        — 文本增量
+  //   9:{"toolCallId":"call-1","toolName":"getWeather",...}  — 工具调用
+  //   d:{"finishReason":"stop","usage":{...}}  — 完成事件
+  return result.toDataStreamResponse();
+}
+
+// --- 简单文本流协议（兼容非 SDK 前端）---
+export async function POST_simple(req: Request) {
+  const { messages } = await req.json();
+
+  const result = streamText({
+    model: openai('gpt-4o'),
+    messages,
+  });
+
+  // 纯文本流：只输出文本 chunk，无结构化事件
+  // 适合对接不使用 AI SDK 的前端或 curl 调试
+  return result.toTextStreamResponse();
+}
+
+// 前端 useChat 默认消费 Data Stream Protocol
+// 如果后端用 toTextStreamResponse()，前端需要配置：
+// useChat({ streamProtocol: 'text' })
+```
+
 ### 自检题
 
 - 流协议不统一时，前端最常见故障是什么？  
@@ -775,6 +2152,57 @@
 - 在客户端按事件逐步更新当前消息内容。  
 - 根据消息 part 类型分发到不同渲染组件。  
 - 对异常中断做 graceful fallback（保留已收到内容）。
+
+### 代码示例
+
+```ts
+import { UIMessageStreamPart, processUIMessageStream } from 'ai';
+
+// 手动读取 UIMessage Stream（不依赖 useChat 的场景）
+async function readChatStream(response: Response) {
+  const reader = response.body!.getReader();
+  const decoder = new TextDecoder();
+  let assistantText = '';
+  const toolCalls: any[] = [];
+
+  // 使用 processUIMessageStream 解析流事件
+  await processUIMessageStream({
+    stream: response.body!,
+    onTextPart(text) {
+      assistantText += text;
+      console.log('[文本增量]', text);
+    },
+    onToolCallPart(toolCall) {
+      toolCalls.push(toolCall);
+      console.log('[工具调用]', toolCall.toolName, toolCall.args);
+    },
+    onToolResultPart(toolResult) {
+      console.log('[工具结果]', toolResult.toolName, toolResult.result);
+    },
+    onDataPart(data) {
+      console.log('[自定义数据]', data);
+    },
+    onErrorPart(error) {
+      console.error('[流错误]', error);
+    },
+    onFinishMessagePart(finish) {
+      console.log('[完成]', finish.finishReason, finish.usage);
+    },
+  });
+
+  return { text: assistantText, toolCalls };
+}
+
+// 使用示例
+const response = await fetch('/api/chat', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ messages: [{ role: 'user', content: '你好' }] }),
+});
+
+const result = await readChatStream(response);
+console.log('最终文本:', result.text);
+```
 
 ### 自检题
 
@@ -799,6 +2227,75 @@
 - 同步推送中间产物，让用户提前看到部分价值。  
 - 使用统一 data type 字段区分不同自定义事件。
 
+### 代码示例
+
+```ts
+// --- 后端：在流中推送自定义数据 ---
+// app/api/chat/route.ts
+import { streamText, createDataStreamResponse } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+export async function POST(req: Request) {
+  const { messages } = await req.json();
+
+  return createDataStreamResponse({
+    execute(dataStream) {
+      // 推送自定义进度事件
+      dataStream.writeMessageAnnotation({ type: 'status', value: '正在检索相关文档...' });
+
+      const result = streamText({
+        model: openai('gpt-4o'),
+        messages,
+        onFinish({ usage }) {
+          // 生成完成后推送 token 统计
+          dataStream.writeMessageAnnotation({
+            type: 'usage',
+            value: { promptTokens: usage.promptTokens, completionTokens: usage.completionTokens },
+          });
+        },
+      });
+
+      result.mergeIntoDataStream(dataStream);
+    },
+  });
+}
+
+// --- 前端：消费自定义数据 ---
+'use client';
+import { useChat } from '@ai-sdk/react';
+
+export default function ChatWithProgress() {
+  const { messages, input, handleInputChange, handleSubmit } = useChat({
+    api: '/api/chat',
+  });
+
+  return (
+    <div>
+      {messages.map(m => (
+        <div key={m.id}>
+          <p>{m.parts.filter(p => p.type === 'text').map(p => p.text).join('')}</p>
+
+          {/* 读取 message annotations 中的自定义数据 */}
+          {m.annotations?.map((ann: any, i: number) => {
+            if (ann.type === 'status') return <small key={i}>📡 {ann.value}</small>;
+            if (ann.type === 'usage') return (
+              <small key={i}>
+                Tokens: {ann.value.promptTokens} + {ann.value.completionTokens}
+              </small>
+            );
+            return null;
+          })}
+        </div>
+      ))}
+      <form onSubmit={handleSubmit}>
+        <input value={input} onChange={handleInputChange} />
+        <button type="submit">发送</button>
+      </form>
+    </div>
+  );
+}
+```
+
 ### 自检题
 
 - 你的场景里最值得流式推送的自定义数据是什么？  
@@ -821,6 +2318,73 @@
 - 在消息级显示错误状态并提供重试按钮。  
 - 对可恢复错误自动重试，对不可恢复错误给出明确引导。  
 - 把错误上下文回传日志系统，支持后端联查。
+
+### 代码示例
+
+```tsx
+'use client';
+import { useChat } from '@ai-sdk/react';
+
+export default function ChatWithErrorHandling() {
+  const { messages, input, handleInputChange, handleSubmit, error, reload, status } = useChat({
+    api: '/api/chat',
+    onError(error) {
+      // 统一上报错误到日志系统
+      console.error('[Chat Error]', {
+        message: error.message,
+        timestamp: Date.now(),
+      });
+    },
+  });
+
+  return (
+    <div>
+      {messages.map(m => (
+        <div key={m.id}>
+          {m.parts.filter(p => p.type === 'text').map((p, i) => (
+            <span key={i}>{p.text}</span>
+          ))}
+        </div>
+      ))}
+
+      {/* 流式中途失败：已收到的内容保留，显示错误 + 重试 */}
+      {error && (
+        <div style={{ color: 'red', padding: 8, border: '1px solid red', borderRadius: 4 }}>
+          <p>出错了: {error.message}</p>
+          <button onClick={() => reload()}>重试</button>
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit}>
+        <input value={input} onChange={handleInputChange} disabled={status === 'streaming'} />
+        <button type="submit" disabled={status === 'streaming'}>发送</button>
+      </form>
+    </div>
+  );
+}
+
+// --- 后端：返回用户友好的错误信息 ---
+// app/api/chat/route.ts
+import { streamText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+export async function POST(req: Request) {
+  try {
+    const { messages } = await req.json();
+    const result = streamText({ model: openai('gpt-4o'), messages });
+    return result.toDataStreamResponse();
+  } catch (error: any) {
+    // 区分错误类型，返回不同 HTTP 状态码
+    if (error.statusCode === 429) {
+      return new Response('请求过于频繁，请稍后再试', { status: 429 });
+    }
+    if (error.statusCode >= 500) {
+      return new Response('AI 服务暂时不可用，请稍后重试', { status: 503 });
+    }
+    return new Response('请求处理失败', { status: 500 });
+  }
+}
+```
 
 ### 自检题
 
