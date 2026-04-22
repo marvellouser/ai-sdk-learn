@@ -1,9 +1,8 @@
 'use client';
 
-import Link from 'next/link';
 import { useState, useTransition } from 'react';
 
-import { lessonCards, type LessonCard } from '../lib/catalog';
+import type { LessonCard } from '../lib/catalog';
 import { getServerUrl } from '../lib/config';
 
 type LessonState = {
@@ -19,7 +18,7 @@ function pretty(value: unknown) {
   return JSON.stringify(value, null, 2);
 }
 
-function LessonRunner({ lesson }: { lesson: LessonCard }) {
+export function LessonRunner({ lesson }: { lesson: LessonCard }) {
   const [prompt, setPrompt] = useState(lesson.defaultPrompt);
   const [minutesPerDay, setMinutesPerDay] = useState(90);
   const [daysAvailable, setDaysAvailable] = useState(14);
@@ -83,46 +82,41 @@ function LessonRunner({ lesson }: { lesson: LessonCard }) {
     }
   }
 
-  if (lesson.mode === 'link' && lesson.href) {
-    return (
-      <article className="lesson-card lesson-card-link">
-        <div>
-          <p className="eyebrow">{lesson.id.toUpperCase()}</p>
-          <h3>{lesson.title}</h3>
-          <p className="muted">{lesson.summary}</p>
-        </div>
-        <Link className="solid-button" href={lesson.href}>
-          打开示例
-        </Link>
-      </article>
-    );
-  }
-
   return (
-    <article className="lesson-card">
-      <div className="lesson-head">
+    <article className="rounded-2xl border border-border bg-surface p-6 shadow-[0_0_35px_rgba(59,130,246,0.15)] backdrop-blur-lg">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="eyebrow">{lesson.id.toUpperCase()}</p>
-          <h3>{lesson.title}</h3>
+          <p className="mb-2 text-xs font-semibold tracking-[0.16em] text-accent-light">{lesson.id.toUpperCase()}</p>
+          <h3 className="text-2xl font-semibold text-text">{lesson.title}</h3>
         </div>
-        <select value={provider} onChange={event => setProvider(event.target.value as 'qwen' | 'deepseek')}>
+        <select
+          className="w-full max-w-44 rounded-xl border border-border bg-surface-light px-4 py-2.5 text-sm text-text outline-none ring-0 transition focus:border-accent"
+          value={provider}
+          onChange={event => setProvider(event.target.value as 'qwen' | 'deepseek')}
+        >
           <option value="qwen">Qwen</option>
           <option value="deepseek">DeepSeek</option>
         </select>
       </div>
 
-      <p className="muted">{lesson.summary}</p>
+      <p className="mt-4 text-sm leading-7 text-muted">{lesson.summary}</p>
 
-      <label className="field">
-        <span>{lesson.promptLabel}</span>
-        <textarea value={prompt} onChange={event => setPrompt(event.target.value)} rows={4} />
+      <label className="mt-5 grid gap-2">
+        <span className="text-sm font-semibold text-text">{lesson.promptLabel}</span>
+        <textarea
+          className="w-full rounded-xl border border-border bg-surface-light px-4 py-3 text-text outline-none transition focus:border-accent"
+          value={prompt}
+          onChange={event => setPrompt(event.target.value)}
+          rows={4}
+        />
       </label>
 
       {lesson.needsSchedule ? (
-        <div className="grid-two">
-          <label className="field">
-            <span>每天投入分钟数</span>
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <label className="grid gap-2">
+            <span className="text-sm font-semibold text-text">每天投入分钟数</span>
             <input
+              className="w-full rounded-xl border border-border bg-surface-light px-4 py-2.5 text-text outline-none transition focus:border-accent"
               type="number"
               value={minutesPerDay}
               min={10}
@@ -130,9 +124,10 @@ function LessonRunner({ lesson }: { lesson: LessonCard }) {
               onChange={event => setMinutesPerDay(Number(event.target.value))}
             />
           </label>
-          <label className="field">
-            <span>总天数</span>
+          <label className="grid gap-2">
+            <span className="text-sm font-semibold text-text">总天数</span>
             <input
+              className="w-full rounded-xl border border-border bg-surface-light px-4 py-2.5 text-text outline-none transition focus:border-accent"
               type="number"
               value={daysAvailable}
               min={1}
@@ -144,7 +139,7 @@ function LessonRunner({ lesson }: { lesson: LessonCard }) {
       ) : null}
 
       <button
-        className="solid-button"
+        className="mt-5 inline-flex w-fit items-center justify-center rounded-full bg-accent px-5 py-2.5 text-white transition hover:bg-accent-light disabled:cursor-not-allowed disabled:opacity-60"
         disabled={isPending || !prompt.trim()}
         onClick={() => startTransition(() => void runLesson())}
         type="button"
@@ -152,19 +147,9 @@ function LessonRunner({ lesson }: { lesson: LessonCard }) {
         {isPending ? '运行中...' : '运行示例'}
       </button>
 
-      <div className="result-panel">
-        {state.error ? <p className="error-text">{state.error}</p> : <pre>{state.output || '运行结果会显示在这里'}</pre>}
+      <div className="mt-5 min-h-44 rounded-xl border border-border bg-surface-light/50 p-4 font-mono text-sm text-text">
+        {state.error ? <p className="text-error">{state.error}</p> : <pre>{state.output || '运行结果会显示在这里'}</pre>}
       </div>
     </article>
-  );
-}
-
-export function LessonPlayground() {
-  return (
-    <section className="lesson-grid">
-      {lessonCards.map(lesson => (
-        <LessonRunner key={lesson.id} lesson={lesson} />
-      ))}
-    </section>
   );
 }
