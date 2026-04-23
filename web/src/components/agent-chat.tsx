@@ -6,6 +6,7 @@ import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls } from 'ai';
 
 import { getServerUrl } from '../lib/config';
+import { ProviderSelect, type ProviderId } from './provider-select';
 
 type AgentId = 'coach' | 'analyst';
 
@@ -75,9 +76,10 @@ function renderPart(part: Record<string, unknown>, index: number) {
 export function AgentChat({ agentId }: { agentId: AgentId }) {
   const preset = presets[agentId];
   const [input, setInput] = useState('');
-  const [provider, setProvider] = useState<'qwen' | 'deepseek'>('qwen');
+  const [provider, setProvider] = useState<ProviderId>('qwen');
 
   const { messages, sendMessage, status, error, stop } = useChat({
+    id: `${agentId}-${provider}`,
     transport: new DefaultChatTransport({
       api: `${getServerUrl()}/api/agents/${agentId}/chat`,
       body: () => ({
@@ -110,14 +112,7 @@ export function AgentChat({ agentId }: { agentId: AgentId }) {
             <p className="mt-3 max-w-3xl leading-7 text-muted">{preset.subtitle}</p>
           </div>
           <div className="grid w-full max-w-52 gap-2">
-            <select
-              className="w-full rounded-xl border border-border bg-surface-light px-4 py-2.5 text-sm text-text outline-none transition focus:border-accent"
-              value={provider}
-              onChange={event => setProvider(event.target.value as 'qwen' | 'deepseek')}
-            >
-              <option value="qwen">Qwen</option>
-              <option value="deepseek">DeepSeek</option>
-            </select>
+            <ProviderSelect value={provider} onChange={setProvider} className="w-full" />
             <Link
               className="inline-flex items-center justify-center rounded-full border border-border bg-surface-light px-4 py-2.5 text-sm text-text transition hover:border-accent-light hover:text-accent-light"
               href="/ai-sdk-learning"

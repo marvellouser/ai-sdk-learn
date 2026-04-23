@@ -8,8 +8,7 @@ import { DefaultChatTransport, type UIMessage } from 'ai';
 import { getServerUrl } from '../lib/config';
 import { createProfileId, parseMediaCopyMarkdown, PROFILE_STORAGE_KEY, stylePresetOptions, type StylePreset } from '../lib/media-copy';
 import { MediaCards, MediaCardsSkeleton } from './media-copy-cards';
-
-type ProviderOption = 'qwen' | 'deepseek';
+import { ProviderSelect, type ProviderId } from './provider-select';
 
 type MemoryProfileResponse = {
   sampleCount: number;
@@ -30,7 +29,7 @@ function extractMessageText(message: UIMessage): string {
 }
 
 export function MediaCopyStudio() {
-  const [provider, setProvider] = useState<ProviderOption>('qwen');
+  const [provider, setProvider] = useState<ProviderId>('qwen');
   const [stylePreset, setStylePreset] = useState<StylePreset>('story');
   const [customStyle, setCustomStyle] = useState('');
   const [ideaInput, setIdeaInput] = useState('');
@@ -72,6 +71,7 @@ export function MediaCopyStudio() {
   }
 
   const { messages, sendMessage, status, error, stop } = useChat({
+    id: `media-copy-${provider}`,
     transport: new DefaultChatTransport({
       api: `${getServerUrl()}/api/media-copy/chat`,
       body: () => ({
@@ -204,14 +204,7 @@ export function MediaCopyStudio() {
 
         <label className="grid content-start gap-2 self-start">
           <span className="text-sm font-semibold text-text">模型</span>
-          <select
-            className="rounded-xl border border-border bg-surface-light px-4 py-2.5 text-sm text-text outline-none transition focus:border-accent"
-            value={provider}
-            onChange={event => setProvider(event.target.value as ProviderOption)}
-          >
-            <option value="qwen">Qwen</option>
-            <option value="deepseek">DeepSeek</option>
-          </select>
+          <ProviderSelect value={provider} onChange={setProvider} />
         </label>
 
         <label className="grid content-start gap-2 self-start">

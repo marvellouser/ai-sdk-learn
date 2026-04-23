@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react';
 
 import type { LessonCard } from '../lib/catalog';
 import { getServerUrl } from '../lib/config';
+import { ProviderSelect, type ProviderId } from './provider-select';
 
 type LessonState = {
   output: string;
@@ -22,7 +23,7 @@ export function LessonRunner({ lesson }: { lesson: LessonCard }) {
   const [prompt, setPrompt] = useState(lesson.defaultPrompt);
   const [minutesPerDay, setMinutesPerDay] = useState(90);
   const [daysAvailable, setDaysAvailable] = useState(14);
-  const [provider, setProvider] = useState<'qwen' | 'deepseek'>('qwen');
+  const [provider, setProvider] = useState<ProviderId>('qwen');
   const [state, setState] = useState<LessonState>({ output: '', error: null });
   const [isPending, startTransition] = useTransition();
 
@@ -89,14 +90,7 @@ export function LessonRunner({ lesson }: { lesson: LessonCard }) {
           <p className="mb-2 text-xs font-semibold tracking-[0.16em] text-accent-light">{lesson.id.toUpperCase()}</p>
           <h3 className="text-2xl font-semibold text-text">{lesson.title}</h3>
         </div>
-        <select
-          className="w-full max-w-44 rounded-xl border border-border bg-surface-light px-4 py-2.5 text-sm text-text outline-none ring-0 transition focus:border-accent"
-          value={provider}
-          onChange={event => setProvider(event.target.value as 'qwen' | 'deepseek')}
-        >
-          <option value="qwen">Qwen</option>
-          <option value="deepseek">DeepSeek</option>
-        </select>
+        <ProviderSelect value={provider} onChange={setProvider} className="w-full max-w-44 ring-0" />
       </div>
 
       <p className="mt-4 text-sm leading-7 text-muted">{lesson.summary}</p>

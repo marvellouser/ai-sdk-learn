@@ -12,6 +12,9 @@ const envSchema = z.object({
   DEEPSEEK_API_KEY: z.string().min(1).optional(),
   DEEPSEEK_BASE_URL: z.string().url(),
   DEEPSEEK_MODEL_NAME: z.string().min(1),
+  CLAUDE_API_KEY: z.string().min(1).optional(),
+  CLAUDE_BASE_URL: z.string().url().optional(),
+  CLAUDE_MODEL_NAME: z.string().min(1),
   AI_PROVIDER: z.enum(['qwen', 'deepseek']).default('qwen'),
   SERVER_PORT: z.coerce.number().default(8080),
 });
@@ -26,6 +29,9 @@ const normalizedEnv = {
   DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY,
   DEEPSEEK_BASE_URL: process.env.DEEPSEEK_BASE_URL ?? 'https://api.deepseek.com/v1',
   DEEPSEEK_MODEL_NAME: process.env.DEEPSEEK_MODEL_NAME ?? process.env.DEEPSEEK_MODEL ?? 'deepseek-chat',
+  CLAUDE_API_KEY: process.env.CLAUDE_API_KEY,
+  CLAUDE_BASE_URL: process.env.CLAUDE_BASE_URL || undefined,
+  CLAUDE_MODEL_NAME: process.env.CLAUDE_MODEL_NAME ?? 'claude-opus-4-7',
   AI_PROVIDER: process.env.AI_PROVIDER === 'alibaba' ? 'qwen' : process.env.AI_PROVIDER,
   SERVER_PORT: process.env.SERVER_PORT,
 };

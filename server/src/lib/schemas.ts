@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-const providerSchema = z.preprocess(value => (value === 'alibaba' ? 'qwen' : value), z.enum(['qwen', 'deepseek']));
+const providerSchema = z.preprocess(value => (value === 'alibaba' ? 'qwen' : value), z.enum(['qwen', 'deepseek', 'claude']));
 
 export const lessonInputSchema = z.object({
   prompt: z.string().min(3, 'Please provide a more specific prompt.'),
