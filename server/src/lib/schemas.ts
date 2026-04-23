@@ -66,6 +66,37 @@ export const mediaCopyChatBodySchema = z.object({
   customStyle: z.string().max(240).optional(),
 });
 
+export const aiNewsSourceSchema = z.enum(['openai', 'anthropic', 'altmanBlog']);
+
+export const aiSummaryBodySchema = z.object({
+  url: z.string().url(),
+  source: aiNewsSourceSchema,
+  itemId: z.string().trim().min(1),
+});
+
+export const emailDraftSchema = z.object({
+  subject: z.string().trim().min(1).max(200),
+  html: z.string().trim().min(1),
+  text: z.string().trim().min(1),
+});
+
+export const aiNewsEmailBodySchema = z.object({
+  toEmail: z.string().trim().email(),
+  draft: emailDraftSchema,
+  context: z
+    .object({
+      kind: z.enum(['list', 'summary']),
+      source: aiNewsSourceSchema.optional(),
+      itemId: z.string().trim().optional(),
+      url: z.string().url().optional(),
+    })
+    .strict(),
+});
+
+export type AiNewsSource = z.infer<typeof aiNewsSourceSchema>;
+export type EmailDraft = z.infer<typeof emailDraftSchema>;
+export type AiNewsEmailBody = z.infer<typeof aiNewsEmailBodySchema>;
+
 export type StudyPlan = z.infer<typeof studyPlanSchema>;
 export type ProductAnalysis = z.infer<typeof productAnalysisSchema>;
 export type StylePreset = z.infer<typeof stylePresetSchema>;

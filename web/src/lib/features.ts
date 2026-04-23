@@ -21,4 +21,11 @@ export const featureCards: FeatureCard[] = [
     href: '/creator-copy',
     badge: 'CONTENT STUDIO',
   },
+  {
+    id: 'ai-news',
+    title: '获取最新AI资讯',
+    summary: '聚合 OpenAI、Anthropic 与 Sam Altman 博客近30天官方资讯，支持AI流式总结与邮件发送。',
+    href: '/ai-news',
+    badge: 'AI NEWS',
+  },
 ];

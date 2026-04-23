@@ -15,6 +15,27 @@ const envSchema = z.object({
   CLAUDE_API_KEY: z.string().min(1).optional(),
   CLAUDE_BASE_URL: z.string().url().optional(),
   CLAUDE_MODEL_NAME: z.string().min(1),
+  SMTP_HOST: z.string().min(1).optional(),
+  SMTP_PORT: z.coerce.number().int().min(1).max(65535).optional(),
+  SMTP_SECURE: z
+    .preprocess(value => {
+      if (value === undefined || value === null || value === '') {
+        return undefined;
+      }
+      if (typeof value === 'boolean') {
+        return value;
+      }
+      if (typeof value === 'string') {
+        const normalized = value.trim().toLowerCase();
+        if (normalized === 'true' || normalized === '1') return true;
+        if (normalized === 'false' || normalized === '0') return false;
+      }
+      return value;
+    }, z.boolean())
+    .optional(),
+  SMTP_USER: z.string().min(1).optional(),
+  SMTP_PASS: z.string().min(1).optional(),
+  SMTP_FROM: z.string().min(1).optional(),
   AI_PROVIDER: z.enum(['qwen', 'deepseek']).default('qwen'),
   SERVER_PORT: z.coerce.number().default(8080),
 });
@@ -32,6 +53,12 @@ const normalizedEnv = {
   CLAUDE_API_KEY: process.env.CLAUDE_API_KEY,
   CLAUDE_BASE_URL: process.env.CLAUDE_BASE_URL || undefined,
   CLAUDE_MODEL_NAME: process.env.CLAUDE_MODEL_NAME ?? 'claude-opus-4-7',
+  SMTP_HOST: process.env.SMTP_HOST,
+  SMTP_PORT: process.env.SMTP_PORT,
+  SMTP_SECURE: process.env.SMTP_SECURE,
+  SMTP_USER: process.env.SMTP_USER,
+  SMTP_PASS: process.env.SMTP_PASS,
+  SMTP_FROM: process.env.SMTP_FROM,
   AI_PROVIDER: process.env.AI_PROVIDER === 'alibaba' ? 'qwen' : process.env.AI_PROVIDER,
   SERVER_PORT: process.env.SERVER_PORT,
 };
