@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { getServerUrl } from '../lib/config';
+import { requestJson } from '../lib/api';
 import {
   createProfileId,
   parseMediaCopyMarkdown,
@@ -77,15 +77,9 @@ export function MediaCopyHistoryPage() {
     try {
       setHistoryError('');
       setHistoryDetailLoading(true);
-      const response = await fetch(
-        `${getServerUrl()}/api/media-copy/history/${encodeURIComponent(currentProfileId)}/${encodeURIComponent(recordId)}`,
+      const detail = await requestJson<MediaCopyHistoryDetail>(
+        `/api/media-copy/history/${encodeURIComponent(currentProfileId)}/${encodeURIComponent(recordId)}`,
       );
-
-      if (!response.ok) {
-        throw new Error(`读取历史详情失败：${response.status}`);
-      }
-
-      const detail = (await response.json()) as MediaCopyHistoryDetail;
       setHistoryDetail(detail);
     } catch (loadError) {
       setHistoryError(loadError instanceof Error ? loadError.message : '读取历史详情失败');
@@ -99,13 +93,9 @@ export function MediaCopyHistoryPage() {
     try {
       setHistoryError('');
       setHistoryLoading(true);
-      const response = await fetch(`${getServerUrl()}/api/media-copy/history/${encodeURIComponent(currentProfileId)}`);
-
-      if (!response.ok) {
-        throw new Error(`读取历史列表失败：${response.status}`);
-      }
-
-      const data = (await response.json()) as MediaCopyHistoryListResponse;
+      const data = await requestJson<MediaCopyHistoryListResponse>(
+        `/api/media-copy/history/${encodeURIComponent(currentProfileId)}`,
+      );
       setHistoryItems(data.items);
 
       if (data.items.length === 0) {

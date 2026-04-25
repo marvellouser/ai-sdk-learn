@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls } from 'ai';
 
-import { getServerUrl } from '../lib/config';
+import { apiUrl } from '../lib/api';
 import { ProviderSelect, type ProviderId } from './provider-select';
 
 type AgentId = 'coach' | 'analyst';
@@ -81,7 +81,7 @@ export function AgentChat({ agentId }: { agentId: AgentId }) {
   const { messages, sendMessage, status, error, stop } = useChat({
     id: `${agentId}-${provider}`,
     transport: new DefaultChatTransport({
-      api: `${getServerUrl()}/api/agents/${agentId}/chat`,
+      api: apiUrl(`/api/agents/${agentId}/chat`),
       body: () => ({
         provider,
       }),

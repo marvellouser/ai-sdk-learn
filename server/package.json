@@ -11,8 +11,8 @@
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.71",
-    "@ai-sdk/openai-compatible": "latest",
-    "ai": "latest",
+    "@ai-sdk/openai-compatible": "2.0.41",
+    "ai": "6.0.168",
     "cors": "^2.8.5",
     "dotenv": "^17.2.1",
     "express": "^5.1.0",

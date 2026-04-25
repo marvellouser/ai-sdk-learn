@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react';
 
 import type { LessonCard } from '../lib/catalog';
-import { getServerUrl } from '../lib/config';
+import { requestJson, requestTextStream } from '../lib/api';
 import { ProviderSelect, type ProviderId } from './provider-select';
 
 type LessonState = {
@@ -38,42 +38,22 @@ export function LessonRunner({ lesson }: { lesson: LessonCard }) {
     };
 
     try {
-      const response = await fetch(`${getServerUrl()}/api/lessons/${lesson.id}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(body),
-      });
-
-      if (!response.ok) {
-        const error = (await response.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(error?.error || `请求失败: ${response.status}`);
-      }
-
       if (lesson.mode === 'text-stream') {
-        const reader = response.body?.getReader();
-        const decoder = new TextDecoder();
-        let collected = '';
-
-        if (!reader) {
-          throw new Error('浏览器未返回可读取的流。');
-        }
-
-        while (true) {
-          const chunk = await reader.read();
-          if (chunk.done) {
-            break;
-          }
-
-          collected += decoder.decode(chunk.value, { stream: true });
-          setState({ output: collected, error: null });
-        }
-
+        await requestTextStream(
+          `/api/lessons/${lesson.id}`,
+          {
+            method: 'POST',
+            body,
+          },
+          collected => setState({ output: collected, error: null }),
+        );
         return;
       }
 
-      const data = await response.json();
+      const data = await requestJson<unknown>(`/api/lessons/${lesson.id}`, {
+        method: 'POST',
+        body,
+      });
       setState({ output: pretty(data), error: null });
     } catch (error) {
       setState({

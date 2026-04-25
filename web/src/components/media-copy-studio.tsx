@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport, type UIMessage } from 'ai';
 
-import { getServerUrl } from '../lib/config';
+import { apiUrl, requestJson } from '../lib/api';
 import { createProfileId, parseMediaCopyMarkdown, PROFILE_STORAGE_KEY, stylePresetOptions, type StylePreset } from '../lib/media-copy';
 import { MediaCards, MediaCardsSkeleton } from './media-copy-cards';
 import { ProviderSelect, type ProviderId } from './provider-select';
@@ -73,7 +73,7 @@ export function MediaCopyStudio() {
   const { messages, sendMessage, status, error, stop } = useChat({
     id: `media-copy-${provider}`,
     transport: new DefaultChatTransport({
-      api: `${getServerUrl()}/api/media-copy/chat`,
+      api: apiUrl('/api/media-copy/chat'),
       body: () => ({
         provider,
         profileId: ensureProfileId(),
@@ -86,13 +86,9 @@ export function MediaCopyStudio() {
   async function loadStyleMemory(currentProfileId: string) {
     try {
       setMemoryError('');
-      const response = await fetch(`${getServerUrl()}/api/media-copy/style-memory/${encodeURIComponent(currentProfileId)}`);
-
-      if (!response.ok) {
-        throw new Error(`读取风格记忆失败：${response.status}`);
-      }
-
-      const data = (await response.json()) as MemoryProfileResponse;
+      const data = await requestJson<MemoryProfileResponse>(
+        `/api/media-copy/style-memory/${encodeURIComponent(currentProfileId)}`,
+      );
       setMemoryCount(data.sampleCount);
       setBlendHint(data.portrait.blendHint || '暂无历史样本，按本次风格生成。');
     } catch (loadError) {
@@ -131,14 +127,9 @@ export function MediaCopyStudio() {
     }
 
     setMemoryError('');
-    const response = await fetch(`${getServerUrl()}/api/media-copy/style-memory/${encodeURIComponent(profileId)}`, {
+    await requestJson(`/api/media-copy/style-memory/${encodeURIComponent(profileId)}`, {
       method: 'DELETE',
     });
-
-    if (!response.ok) {
-      setMemoryError(`重置失败：${response.status}`);
-      return;
-    }
 
     setMemoryCount(0);
     setBlendHint('暂无历史样本，按本次风格生成。');

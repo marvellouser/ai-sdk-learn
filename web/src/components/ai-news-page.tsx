@@ -3,8 +3,8 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 
+import { requestJson } from '../lib/api';
 import { type AiNewsFeedResponse, sourceLabel, formatDateLabel, summaryPageHref } from '../lib/ai-news';
-import { getServerUrl } from '../lib/config';
 
 function SourceSection({
   title,
@@ -74,11 +74,7 @@ export function AiNewsPage() {
     try {
       setLoading(true);
       setLoadError('');
-      const response = await fetch(`${getServerUrl()}/api/ai-news/feed`);
-      if (!response.ok) {
-        throw new Error(`读取资讯失败：${response.status}`);
-      }
-      const payload = (await response.json()) as AiNewsFeedResponse;
+      const payload = await requestJson<AiNewsFeedResponse>('/api/ai-news/feed');
       setFeed(payload);
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : '读取资讯失败');
@@ -100,24 +96,16 @@ export function AiNewsPage() {
     try {
       setSending(true);
       setSendResult('');
-      const response = await fetch(`${getServerUrl()}/api/ai-news/email/send`, {
+      await requestJson('/api/ai-news/email/send', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+        body: {
           toEmail: toEmail.trim(),
           draft: feed.listEmailDraft,
           context: {
             kind: 'list',
           },
-        }),
+        },
       });
-
-      if (!response.ok) {
-        const payload = (await response.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(payload?.error ?? `发送失败：${response.status}`);
-      }
 
       setSendResult('资讯邮件发送成功。');
     } catch (error) {

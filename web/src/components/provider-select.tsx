@@ -1,10 +1,6 @@
-export type ProviderId = 'qwen' | 'deepseek' | 'claude';
+import { providerOptions, type ProviderId } from '../lib/providers';
 
-const providers: { value: ProviderId; label: string }[] = [
-  { value: 'qwen', label: 'Qwen' },
-  { value: 'deepseek', label: 'DeepSeek' },
-  { value: 'claude', label: 'Claude' },
-];
+export type { ProviderId };
 
 export function ProviderSelect({
   value,
@@ -21,7 +17,7 @@ export function ProviderSelect({
       value={value}
       onChange={event => onChange(event.target.value as ProviderId)}
     >
-      {providers.map(p => (
+      {providerOptions.map(p => (
         <option key={p.value} value={p.value}>
           {p.label}
         </option>

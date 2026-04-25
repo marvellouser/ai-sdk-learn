@@ -14,10 +14,10 @@ importers:
         specifier: ^3.0.71
         version: 3.0.71(zod@4.3.6)
       '@ai-sdk/openai-compatible':
-        specifier: latest
+        specifier: 2.0.41
         version: 2.0.41(zod@4.3.6)
       ai:
-        specifier: latest
+        specifier: 6.0.168
         version: 6.0.168(zod@4.3.6)
       cors:
         specifier: ^2.8.5
@@ -60,10 +60,10 @@ importers:
   web:
     dependencies:
       '@ai-sdk/react':
-        specifier: latest
+        specifier: 3.0.170
         version: 3.0.170(react@19.2.5)(zod@4.3.6)
       ai:
-        specifier: latest
+        specifier: 6.0.168
         version: 6.0.168(zod@4.3.6)
       next:
         specifier: ^15.5.2

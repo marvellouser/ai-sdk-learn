@@ -4,8 +4,8 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 
+import { requestJson, requestTextStream } from '../lib/api';
 import { buildSummaryEmailDraft, type AiNewsSource, sourceLabel } from '../lib/ai-news';
-import { getServerUrl } from '../lib/config';
 
 function isAiNewsSource(value: string | null): value is AiNewsSource {
   return value === 'openai' || value === 'anthropic' || value === 'altmanBlog';
@@ -41,45 +41,23 @@ export function AiNewsSummaryPage() {
         setLoadError('');
         setSummaryMarkdown('');
 
-        const response = await fetch(`${getServerUrl()}/api/ai-news/summary/stream`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
+        await requestTextStream(
+          '/api/ai-news/summary/stream',
+          {
+            method: 'POST',
+            body: {
+              source,
+              itemId,
+              url,
+            },
           },
-          body: JSON.stringify({
-            source,
-            itemId,
-            url,
-          }),
-        });
+          collected => {
+            if (!disposed) {
+              setSummaryMarkdown(collected);
+            }
+          },
+        );
 
-        if (!response.ok) {
-          const payload = (await response.json().catch(() => null)) as { error?: string } | null;
-          throw new Error(payload?.error ?? `总结请求失败：${response.status}`);
-        }
-
-        const reader = response.body?.getReader();
-        if (!reader) {
-          throw new Error('浏览器未返回可读取流。');
-        }
-        const decoder = new TextDecoder();
-        let collected = '';
-
-        while (true) {
-          const chunk = await reader.read();
-          if (chunk.done) {
-            break;
-          }
-          collected += decoder.decode(chunk.value, { stream: true });
-          if (!disposed) {
-            setSummaryMarkdown(collected);
-          }
-        }
-
-        collected += decoder.decode();
-        if (!disposed) {
-          setSummaryMarkdown(collected);
-        }
       } catch (error) {
         if (!disposed) {
           setLoadError(error instanceof Error ? error.message : 'AI总结失败');
@@ -114,12 +92,9 @@ export function AiNewsSummaryPage() {
         summaryMarkdown,
       });
 
-      const response = await fetch(`${getServerUrl()}/api/ai-news/email/send`, {
+      await requestJson('/api/ai-news/email/send', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+        body: {
           toEmail: toEmail.trim(),
           draft,
           context: {
@@ -128,13 +103,8 @@ export function AiNewsSummaryPage() {
             itemId,
             url,
           },
-        }),
+        },
       });
-
-      if (!response.ok) {
-        const payload = (await response.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(payload?.error ?? `发送失败：${response.status}`);
-      }
 
       setSendResult('总结邮件发送成功。');
     } catch (error) {
