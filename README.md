@@ -6,7 +6,7 @@
 
 - `web/`: Next.js 前端，负责课程页面和双 Agent 演示
 - `server/`: Express + AI SDK 后端，负责 lesson 接口、工具调用和 Agent 流式响应
-- `docs/`: 中文课程讲义
+- `docs/`: 中文课程讲义与功能需求文档
 
 ## 快速开始
 
@@ -35,7 +35,7 @@ pnpm dev
 
 ## 学习路线
 
-1. 先看 `docs/01-provider-and-first-call.md`
+1. 先看 `docs/lesson/01-provider-and-first-call.md`
 2. 跟着课程页依次体验 `lesson-1` 到 `lesson-8`
 3. 再进入 `学习教练 Agent` 和 `需求分析 Agent` 综合 demo
 

@@ -28,4 +28,11 @@ export const featureCards: FeatureCard[] = [
     href: '/ai-news',
     badge: 'AI NEWS',
   },
+  {
+    id: 'compound-interest',
+    title: '复利计算器',
+    summary: '支持固定本金、定期定额投入和目标金额反推，纯前端完成每期复利明细计算。',
+    href: '/compound-interest',
+    badge: 'FINANCE TOOL',
+  },
 ];
