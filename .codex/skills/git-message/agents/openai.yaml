@@ -1,0 +1,4 @@
+interface:
+  display_name: "Git Message"
+  short_description: "按项目规则生成中文 Git 提交信息，含类型、详情和模型名称"
+  default_prompt: "Use $git-message to generate a Chinese Git commit message for the staged changes."

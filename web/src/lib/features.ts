@@ -29,6 +29,13 @@ export const featureCards: FeatureCard[] = [
     badge: 'AI NEWS',
   },
   {
+    id: 'video-analysis',
+    title: '视频网站分析',
+    summary: '输入 YouTube、bilibili、douyin 等公开视频地址，解析视频信息并流式输出 AI 分析。',
+    href: '/video-analysis',
+    badge: 'VIDEO ANALYSIS',
+  },
+  {
     id: 'compound-interest',
     title: '复利计算器',
     summary: '支持固定本金、定期定额投入和目标金额反推，纯前端完成每期复利明细计算。',
