@@ -42,4 +42,11 @@ export const featureCards: FeatureCard[] = [
     href: '/compound-interest',
     badge: 'FINANCE TOOL',
   },
+  {
+    id: 'image-processor',
+    title: '图片处理器',
+    summary: '上传 PNG/JPG/WebP 图片，在线进行格式转换、尺寸压缩、按目标大小压缩与旋转翻转。',
+    href: '/image-processor',
+    badge: 'IMAGE TOOL',
+  },
 ];

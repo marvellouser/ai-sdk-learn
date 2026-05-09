@@ -4,6 +4,7 @@ import express from 'express';
 import { agentsRouter } from './routes/agents.js';
 import { aiNewsRouter } from './routes/ai-news.js';
 import { healthRouter } from './routes/health.js';
+import { imageProcessorRouter } from './routes/image-processor.js';
 import { lessonsRouter } from './routes/lessons.js';
 import { mediaCopyRouter } from './routes/media-copy.js';
 import { videoAnalysisRouter } from './routes/video-analysis.js';
@@ -24,6 +25,7 @@ export function createApp() {
   app.use('/api', mediaCopyRouter);
   app.use('/api', aiNewsRouter);
   app.use('/api', videoAnalysisRouter);
+  app.use('/api', imageProcessorRouter);
 
   app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     const message = error instanceof Error ? error.message : '服务端发生未知错误';

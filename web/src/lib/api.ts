@@ -9,7 +9,7 @@ export function apiUrl(path: string): string {
   return `${getServerUrl()}${normalizedPath}`;
 }
 
-async function getErrorMessage(response: Response): Promise<string> {
+export async function getErrorMessage(response: Response): Promise<string> {
   const payload = (await response.json().catch(() => null)) as { error?: string } | null;
   return payload?.error ?? `请求失败：${response.status}`;
 }
@@ -34,6 +34,18 @@ export async function requestJson<T>(path: string, options: RequestJsonOptions =
   }
 
   return (await response.json()) as T;
+}
+
+export async function requestBlob(
+  path: string,
+  formData: FormData,
+): Promise<{ blob: Blob; headers: Headers }> {
+  const response = await fetch(apiUrl(path), { method: 'POST', body: formData });
+  if (!response.ok) {
+    throw new Error(await getErrorMessage(response));
+  }
+  const blob = await response.blob();
+  return { blob, headers: response.headers };
 }
 
 export async function requestTextStream(
