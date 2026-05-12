@@ -14,7 +14,14 @@ export const videoSourceConfigs = [
     label: 'douyin',
     pageHosts: ['douyin.com', 'iesdouyin.com'],
   },
+  {
+    id: 'local',
+    label: '本地上传',
+    pageHosts: [],
+  },
 ] as const;
+
+export const remoteVideoSourceConfigs = videoSourceConfigs.filter(config => config.id !== 'local');
 
 export type VideoSource = (typeof videoSourceConfigs)[number]['id'];
 
@@ -23,5 +30,5 @@ export function sourceLabel(source: VideoSource): string {
 }
 
 export function supportedVideoSourceLabel(): string {
-  return videoSourceConfigs.map(config => config.label).join('、');
+  return remoteVideoSourceConfigs.map(config => config.label).join('、');
 }

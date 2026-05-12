@@ -118,11 +118,13 @@ export const videoSubtitleTrackSchema = z
   })
   .strict();
 
+const httpUrlPattern = /^https?:\/\//i;
+
 export const videoAnalysisMetadataSchema = z
   .object({
     source: videoSourceSchema,
-    originalUrl: z.string().url(),
-    finalUrl: z.string().url(),
+    originalUrl: z.string().min(1),
+    finalUrl: z.string().min(1),
     title: z.string().trim().min(1).optional(),
     description: z.string().trim().optional(),
     thumbnailUrl: z.string().url().optional(),
@@ -135,7 +137,11 @@ export const videoAnalysisMetadataSchema = z
     transcriptSource: z.string().trim().optional(),
     warnings: z.array(z.string()),
   })
-  .strict();
+  .strict()
+  .refine(
+    data => data.source === 'local' || (httpUrlPattern.test(data.originalUrl) && httpUrlPattern.test(data.finalUrl)),
+    { message: '远端视频的 originalUrl/finalUrl 必须是 http(s) URL', path: ['originalUrl'] },
+  );
 
 export const videoMetadataBodySchema = z.object({
   url: z.string().trim().url('请输入有效的视频页面地址。'),

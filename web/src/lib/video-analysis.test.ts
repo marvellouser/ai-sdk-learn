@@ -9,7 +9,7 @@ import {
   sourceLabel,
   type VideoAnalysisMetadata,
 } from './video-analysis';
-import { supportedVideoSourceLabel, videoSourceConfigs } from './video-analysis-sources';
+import { remoteVideoSourceConfigs, supportedVideoSourceLabel } from './video-analysis-sources';
 
 describe('video-analysis helpers', () => {
   const video: VideoAnalysisMetadata = {
@@ -28,7 +28,7 @@ describe('video-analysis helpers', () => {
     expect(sourceLabel('douyin')).toBe('douyin');
     expect(getVideoTitle(video)).toBe('测试视频');
     expect(getVideoTitle({ ...video, title: '' })).toBe('未解析到标题');
-    expect(supportedVideoSourceLabel()).toBe(videoSourceConfigs.map(config => config.label).join('、'));
+    expect(supportedVideoSourceLabel()).toBe(remoteVideoSourceConfigs.map(config => config.label).join('、'));
   });
 
   it('formats dates and keeps invalid values visible', () => {

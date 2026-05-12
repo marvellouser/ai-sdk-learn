@@ -23,6 +23,14 @@ export const videoSourceConfigs = [
     auxiliaryHosts: ['douyin.com', 'iesdouyin.com'],
     auxiliaryHostSuffixes: ['.douyin.com', '.iesdouyin.com', '.byteimg.com', '.bytecdn.cn'],
   },
+  {
+    id: 'local',
+    label: '本地上传',
+    pageHosts: [],
+    pageHostSuffixes: [],
+    auxiliaryHosts: [],
+    auxiliaryHostSuffixes: [],
+  },
 ] as const;
 
 export type VideoSource = (typeof videoSourceConfigs)[number]['id'];

@@ -1,9 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
-import { requestJson, requestTextStream } from '../lib/api';
+import { apiUrl, getErrorMessage, requestJson, requestTextStream } from '../lib/api';
 import { supportedVideoSourceLabel } from '../lib/video-analysis-sources';
 import {
   formatDateLabel,
@@ -15,6 +15,10 @@ import {
   type VideoAnalysisMetadata,
 } from '../lib/video-analysis';
 
+const MAX_UPLOAD_BYTES = 200 * 1024 * 1024;
+
+type InputMode = 'url' | 'upload';
+
 function isValidUrl(value: string): boolean {
   try {
     const parsed = new URL(value);
@@ -22,6 +26,12 @@ function isValidUrl(value: string): boolean {
   } catch {
     return false;
   }
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
 function InfoRow({ label, value }: { label: string; value?: string }) {
@@ -34,6 +44,8 @@ function InfoRow({ label, value }: { label: string; value?: string }) {
 }
 
 function VideoMetadataView({ video }: { video: VideoAnalysisMetadata }) {
+  const isLocal = video.source === 'local';
+
   return (
     <section className="grid gap-5 rounded-2xl border border-border bg-surface p-5 shadow-[0_14px_32px_rgba(15,23,42,0.08)] md:grid-cols-[320px_1fr] md:p-6">
       <div className="grid content-start gap-3">
@@ -46,17 +58,21 @@ function VideoMetadataView({ video }: { video: VideoAnalysisMetadata }) {
               src={video.thumbnailUrl}
             />
           ) : (
-            <div className="grid aspect-video place-items-center px-4 text-center text-sm text-muted">未解析到封面</div>
+            <div className="grid aspect-video place-items-center px-4 text-center text-sm text-muted">
+              {isLocal ? '本地视频未提取封面' : '未解析到封面'}
+            </div>
           )}
         </div>
-        <a
-          className="inline-flex justify-center rounded-full border border-border bg-surface-light px-4 py-2 text-sm text-text transition hover:border-accent-light hover:text-accent-light"
-          href={video.finalUrl}
-          rel="noreferrer"
-          target="_blank"
-        >
-          打开原页面
-        </a>
+        {!isLocal ? (
+          <a
+            className="inline-flex justify-center rounded-full border border-border bg-surface-light px-4 py-2 text-sm text-text transition hover:border-accent-light hover:text-accent-light"
+            href={video.finalUrl}
+            rel="noreferrer"
+            target="_blank"
+          >
+            打开原页面
+          </a>
+        ) : null}
       </div>
 
       <div className="grid gap-4">
@@ -70,7 +86,7 @@ function VideoMetadataView({ video }: { video: VideoAnalysisMetadata }) {
           <InfoRow label="作者" value={video.author} />
           <InfoRow label="时长" value={video.duration} />
           <InfoRow label="发布时间" value={formatDateLabel(video.publishedAt)} />
-          <InfoRow label="最终地址" value={video.finalUrl} />
+          {isLocal ? null : <InfoRow label="最终地址" value={video.finalUrl} />}
         </dl>
 
         <div className="grid gap-4 lg:grid-cols-2">
@@ -85,7 +101,9 @@ function VideoMetadataView({ video }: { video: VideoAnalysisMetadata }) {
                 ))}
               </div>
             ) : (
-              <p className="mt-2 text-sm text-muted">未解析到公开清晰度信息。</p>
+              <p className="mt-2 text-sm text-muted">
+                {isLocal ? '未从文件中读取到清晰度信息。' : '未解析到公开清晰度信息。'}
+              </p>
             )}
           </div>
 
@@ -100,7 +118,9 @@ function VideoMetadataView({ video }: { video: VideoAnalysisMetadata }) {
                 ))}
               </div>
             ) : (
-              <p className="mt-2 text-sm text-muted">未发现公开字幕轨道。</p>
+              <p className="mt-2 text-sm text-muted">
+                {isLocal ? '上传视频中未发现内嵌字幕轨道。' : '未发现公开字幕轨道。'}
+              </p>
             )}
           </div>
         </div>
@@ -126,8 +146,28 @@ function VideoMetadataView({ video }: { video: VideoAnalysisMetadata }) {
   );
 }
 
+async function uploadVideoForMetadata(file: File): Promise<VideoAnalysisMetadata> {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const response = await fetch(apiUrl('/api/video-analysis/upload'), {
+    method: 'POST',
+    body: formData,
+  });
+
+  if (!response.ok) {
+    throw new Error(await getErrorMessage(response));
+  }
+
+  return (await response.json()) as VideoAnalysisMetadata;
+}
+
 export function VideoAnalysisPage() {
+  const [inputMode, setInputMode] = useState<InputMode>('url');
   const [urlInput, setUrlInput] = useState('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [video, setVideo] = useState<VideoAnalysisMetadata | null>(null);
   const [metadataLoading, setMetadataLoading] = useState(false);
   const [metadataError, setMetadataError] = useState('');
@@ -135,7 +175,37 @@ export function VideoAnalysisPage() {
   const [aiError, setAiError] = useState('');
   const [aiText, setAiText] = useState('');
 
-  async function handleAnalyze() {
+  function switchMode(mode: InputMode) {
+    if (mode === inputMode) return;
+    setInputMode(mode);
+    setMetadataError('');
+    setAiError('');
+    setVideo(null);
+    setAiText('');
+    setSelectedFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }
+
+  function openFilePicker() {
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+      fileInputRef.current.click();
+    }
+  }
+
+  function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0] ?? null;
+    if (file && file.size > MAX_UPLOAD_BYTES) {
+      setMetadataError(`视频文件超过 ${Math.round(MAX_UPLOAD_BYTES / 1024 / 1024)}MB 上限。`);
+      setSelectedFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+    setSelectedFile(file);
+    setMetadataError('');
+  }
+
+  async function handleAnalyzeUrl() {
     const url = urlInput.trim();
     if (!isValidUrl(url)) {
       setMetadataError('请输入有效的视频页面地址。');
@@ -159,6 +229,27 @@ export function VideoAnalysisPage() {
     } catch (error) {
       setVideo(null);
       setMetadataError(error instanceof Error ? error.message : '视频解析失败');
+    } finally {
+      setMetadataLoading(false);
+    }
+  }
+
+  async function handleAnalyzeUpload() {
+    if (!selectedFile) {
+      setMetadataError('请先选择要上传的视频文件。');
+      return;
+    }
+
+    try {
+      setMetadataLoading(true);
+      setMetadataError('');
+      setAiError('');
+      setAiText('');
+      const payload = await uploadVideoForMetadata(selectedFile);
+      setVideo(payload);
+    } catch (error) {
+      setVideo(null);
+      setMetadataError(error instanceof Error ? error.message : '视频上传解析失败');
     } finally {
       setMetadataLoading(false);
     }
@@ -191,15 +282,19 @@ export function VideoAnalysisPage() {
     }
   }
 
+  const submitDisabled =
+    metadataLoading || (inputMode === 'url' ? !urlInput.trim() : !selectedFile);
+
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-6 px-4 py-10 md:px-6 md:py-12">
       <section className="rounded-3xl border border-border bg-surface p-7 shadow-[0_18px_42px_rgba(15,23,42,0.08)] backdrop-blur-xl md:p-10">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="mb-3 text-xs font-semibold tracking-[0.16em] text-accent-light">VIDEO ANALYSIS</p>
-            <h1 className="text-balance text-4xl leading-tight font-semibold text-text md:text-5xl">视频网站分析</h1>
+            <h1 className="text-balance text-4xl leading-tight font-semibold text-text md:text-5xl">视频分析</h1>
             <p className="mt-4 max-w-2xl text-base leading-8 text-muted">
-              输入 {supportedVideoSourceLabel()} 等公开视频页面地址，解析页面可公开获取的视频信息，并交给 AI 流式分析。
+              第一步：输入 {supportedVideoSourceLabel()} 等公开视频页面地址，或直接上传本地视频，解析视频元信息与内嵌字幕。
+              第二步：按需点击「AI 分析视频」再把元信息交给 AI 做流式分析。
             </p>
           </div>
           <Link
@@ -212,31 +307,88 @@ export function VideoAnalysisPage() {
       </section>
 
       <section className="rounded-2xl border border-border bg-surface p-5 shadow-[0_14px_32px_rgba(15,23,42,0.08)] md:p-6">
+        <div className="mb-5 inline-flex rounded-full border border-border bg-surface-light p-1 text-sm">
+          <button
+            className={`rounded-full px-4 py-1.5 transition ${
+              inputMode === 'url' ? 'bg-accent text-white shadow' : 'text-text hover:text-accent-light'
+            }`}
+            onClick={() => switchMode('url')}
+            type="button"
+          >
+            视频网址
+          </button>
+          <button
+            className={`rounded-full px-4 py-1.5 transition ${
+              inputMode === 'upload' ? 'bg-accent text-white shadow' : 'text-text hover:text-accent-light'
+            }`}
+            onClick={() => switchMode('upload')}
+            type="button"
+          >
+            上传视频
+          </button>
+        </div>
+
         <form
           className="grid gap-3 md:grid-cols-[1fr_auto]"
           onSubmit={event => {
             event.preventDefault();
-            void handleAnalyze();
+            if (inputMode === 'url') {
+              void handleAnalyzeUrl();
+            } else {
+              void handleAnalyzeUpload();
+            }
           }}
         >
-          <label className="grid gap-2">
-            <span className="text-sm font-semibold text-text">视频页面地址</span>
-            <input
-              className="min-w-0 rounded-xl border border-border bg-surface-light px-4 py-3 text-sm text-text outline-none transition focus:border-accent"
-              onChange={event => setUrlInput(event.target.value)}
-              placeholder="https://www.youtube.com/watch?v=..."
-              type="url"
-              value={urlInput}
-            />
-          </label>
+          {inputMode === 'url' ? (
+            <label className="grid gap-2">
+              <span className="text-sm font-semibold text-text">视频页面地址</span>
+              <input
+                className="min-w-0 rounded-xl border border-border bg-surface-light px-4 py-3 text-sm text-text outline-none transition focus:border-accent"
+                onChange={event => setUrlInput(event.target.value)}
+                placeholder="https://www.youtube.com/watch?v=..."
+                type="url"
+                value={urlInput}
+              />
+            </label>
+          ) : (
+            <label className="grid gap-2">
+              <span className="text-sm font-semibold text-text">本地视频文件</span>
+              <div className="flex flex-wrap items-center gap-3 rounded-xl border border-dashed border-border bg-surface-light px-4 py-3">
+                <input
+                  accept="video/*"
+                  className="hidden"
+                  onChange={handleFileChange}
+                  ref={fileInputRef}
+                  type="file"
+                />
+                <button
+                  className="rounded-full border border-border bg-surface px-4 py-1.5 text-sm text-text transition hover:border-accent-light hover:text-accent-light"
+                  onClick={openFilePicker}
+                  type="button"
+                >
+                  选择文件
+                </button>
+                <span className="min-w-0 flex-1 truncate text-sm text-muted">
+                  {selectedFile
+                    ? `${selectedFile.name}（${formatFileSize(selectedFile.size)}）`
+                    : `支持 mp4 / mov / mkv / webm，最大 ${Math.round(MAX_UPLOAD_BYTES / 1024 / 1024)}MB`}
+                </span>
+              </div>
+            </label>
+          )}
           <button
             className="self-end rounded-full bg-accent px-6 py-3 text-sm font-medium text-white transition hover:bg-accent-light disabled:cursor-not-allowed disabled:opacity-60"
-            disabled={!urlInput.trim() || metadataLoading}
+            disabled={submitDisabled}
             type="submit"
           >
-            {metadataLoading ? '分析中...' : '分析'}
+            {metadataLoading ? (inputMode === 'upload' ? '上传解析中...' : '分析中...') : inputMode === 'upload' ? '上传并解析' : '分析'}
           </button>
         </form>
+        {inputMode === 'upload' ? (
+          <p className="mt-3 text-xs leading-6 text-muted">
+            说明：仅会提取视频内嵌字幕轨道（如 SRT/ASS），未内嵌字幕的视频只能基于文件元信息进行 AI 分析。视频文件本身不会被保留。
+          </p>
+        ) : null}
         {metadataError ? <p className="mt-3 text-sm text-error">{metadataError}</p> : null}
       </section>
 
@@ -246,7 +398,7 @@ export function VideoAnalysisPage() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-sm font-semibold text-text">AI 分析视频</p>
-            <p className="mt-1 text-sm text-muted">基于已解析的视频元信息和公开字幕生成分析结果。</p>
+            <p className="mt-1 text-sm text-muted">基于已解析的视频元信息和字幕生成分析结果。</p>
           </div>
           <button
             className="rounded-full bg-accent px-5 py-2.5 text-sm font-medium text-white transition hover:bg-accent-light disabled:cursor-not-allowed disabled:opacity-60"
